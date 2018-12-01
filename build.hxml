@@ -1,0 +1,17 @@
+# Build release
+
+-lib hxnodejs
+-lib djNode
+-lib djTui
+-cp src/
+-main Main
+-js bin/psxlaunch.js
+-dce full
+-D terminal
+-D analyzer-optimize
+--no-traces
+
+# note -cmd dos command
+# e.g.
+# -cmd copy ./bin/config.ini ./release/
+# -cmd echo Build [OK]
