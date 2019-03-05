@@ -48,6 +48,10 @@ Just call **`psxmed`** from anywhere.\
 Then you must **setup the config file**. \
 To quickly open `config.ini` you can run `psxmed cfg` and the file will be opened with the default editor. Else when you run `psxmed` it will inform you that it needs to be configured along with the full path of the config file.
 
+![Config error message](media/setup_message.png)
+<sup>If you run the program without setting up the config file screen</sup>
+
+
 ### Config.ini
 The file is documented.  What you **need to set** for the launcher to boot :
 - Path of CD images, `isos` parameter
