@@ -5,10 +5,10 @@
 -lib djTui
 -cp src/
 -main Main
--js bin/psxlaunch.js
--dce full
+-js bin/rel.js
+# -dce full
 -D terminal
--D analyzer-optimize
+# -D analyzer-optimize
 --no-traces
 
 # note -cmd dos command

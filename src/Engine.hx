@@ -5,6 +5,7 @@ import djNode.utils.CLIApp;
 import djNode.utils.ProcUtil;
 import haxe.crypto.Md5;
 import hxconf.ConfigFile;
+import js.Error;
 import js.Node;
 import js.node.ChildProcess;
 import js.node.Fs;
@@ -14,50 +15,62 @@ import js.node.Process;
 import sys.io.File;
 
 
-	
+//
 typedef GameEntry = {
 	var name:String;
 	var path:String;
-};
-	
+	var ext:String; // extension in lower case
+}
+
+
 /**
- * ...
+ * PSX Launcher Main Engine
  */
 class Engine 
 {
-	// Search for these type of files when scanning
-	static var extensionsToSearch = ["cue", "m3u", "zip"];
+	// - Will be appended to final if "use_pfo" is true
+	static var extensions_mountable = ["pfo", "zip"];
+	
+	static var extensionsToSearch = ["cue", "m3u", "zip", "pfo"];
+	static var extensionsToMount = ["pfo", "zip"];
+	
 	static var file_config = "config.ini";
+	static var file_config_empty = "config_empty.ini";
 	static var MEDNAFEN_EXE = "mednafen.exe";
 	static var PSIMO_EXE = "PFM.exe";
 	
+	public static var NAME = "Mednafen PSX Custom Launcher";
+	public static var VER = "0.4";
+	
+	
 	// -- Read from `CONFIG` file:
+	public var string_size:String;
 	public var path_isos:String;
 	public var path_mednafen:String;
 	public var path_ramdrive:String;
 	public var path_autorun:String;
 	public var setting_autosave:Bool;
-	
-	// --
+	public var setting_pfm:Bool;
+	// AUTOGEN:
 	public var flag_use_ramdrive(default, null):Bool = false;
 	
-	// The Names of the games (filenames)
+	/** All game entries */
 	public var list_games:Array<GameEntry>;
-	// -- fake
+	/** NAME of game entries */
 	public var list_names(get, null):Array<String>;
-	function get_list_names(){
-		var r:Array<String> = [];
-		for (i in list_games) r.push(i.name);
-		return r;
-	}
+		function get_list_names() {
+			var r:Array<String> = [];
+			for (i in list_games) r.push(i.name);
+			return r;
+		}
 	
 	// Read this error in case of fatal exit
 	public var ERROR:String;
 	// Read this to get operations LOG
 	public var OPLOG:String;
 	
-	// -- Working with one game at a time
-	// Prepared game:
+	// -- The engine is working with one game at a time. so
+	//  - Prepared game vars:
 	
 	public var current:GameEntry;
 	public var index:Int = -1;
@@ -74,38 +87,65 @@ class Engine
 	// If a game needs to be mounted (zip) this will hold the game fill path.
 	// so that it can be unmounted later. It checks for null to figure out mounted game or not.
 	var mountedPath:String = null;
-	// Current selected game is zip or not
+	
+	// Current selected game is ZIP/PFO ( needs to be mounted )
 	public var isZIP:Bool;
 	
-	//====================================================;
-	
+	// ===================================================;
 	
 	public function new() 
 	{
 	}//---------------------------------------------------;
 	
+	public static function NPM_install():Bool
+	{
+		var cp = Path.dirname(Sys.programPath());
+		var p0 = Path.join(cp, file_config);
+		var p1 = Path.join(cp, file_config_empty);
+		
+		if (!Fs.existsSync(p0))
+		{
+			FileTool.copyFile(p1, p0);
+			return true;
+		}
 	
+		return false;
+	}//---------------------------------------------------;
 	
+	/**
+	   Initialize
+	   - Throws errors (read engine.error)
+	   @return
+	**/
 	public function init():Bool
 	{
 		try{
 			loadSettingsFile();
 			scanDirectories();
-			if (list_games.length == 0) throw "Did not find any games";
 			checkAutorun();
-			
 		}catch (e:String)
 		{
 			ERROR = e;
 			return false;
 		}
+		catch (e:Error)
+		{
+			trace(e.stack);
+			ERROR = "Config file Parse Error.";
+			return false;
+		}
 		return true;
-	}
+	}//---------------------------------------------------;
+	
+	static public function getConfigFullpath()
+	{
+		var P = Path.dirname(Sys.programPath());
+		return Path.join(P, Engine.file_config);
+	}//---------------------------------------------------;
 	
 	
 	public function anySavesRAM():Bool { return saves_ram.length > 0;}
 	public function anySavesLOCAL():Bool { return saves_local.length > 0;}
-	
 
 	/**  Loads `CONFIG` file and populates variables
 	     Also checks for paths in config file if valid
@@ -117,6 +157,8 @@ class Engine
 		ini.read(Fs.readFileSync(Path.join(Path.dirname(Node.process.argv[1]), file_config), {encoding: "utf8"}));			
 		
 		var cfg = ini.getAll("settings");
+		
+		string_size = cfg.get("size");
 		path_isos = Path.normalize( cfg.get("isos") );
 		path_mednafen = Path.normalize( cfg.get("mednafen") );
 		path_ramdrive = Path.normalize( cfg.get("ramdrive") );
@@ -124,6 +166,16 @@ class Engine
 		setting_autosave = Std.parseInt(cfg.get("autosave") ) == 1;
 		
 		//-- Checks
+		
+		if (path_isos.length < 2)
+		{
+			throw 'ISOPATH not set';
+		}
+		
+		if (path_mednafen.length < 2)
+		{
+			throw 'MEDNAFEN PATH not set';
+		}
 		
 		if (!FileTool.pathExists(path_isos))
 		{
@@ -172,12 +224,12 @@ class Engine
 		var m3u:Array<String> = [];
 		var l = FileTool.getFileListFromDirR(path_isos, extensionsToSearch);
 
-		
 		for (i in l)
 		{
 			var entry = {
 				name : Path.basename(i, Path.extname(i)),
-				path : i
+				path : i,
+				ext  : Path.extname(i).toLowerCase().substr(1)
 			};
 			
 			list_games.push(entry);	
@@ -443,7 +495,7 @@ class Engine
 			if (FileTool.pathExists(s)) ar.push(s);
 		}
 		return ar;
-	}
+	}//---------------------------------------------------;
 	
 
 	/**
@@ -455,11 +507,12 @@ class Engine
 	{
 		index = i;
 		current = list_games[index];
-		trace("Preparing Game: " + current.name);
 		saves_local = getLocalSaves(i);
 		saves_ram = getRamSaves(i);
-		isZIP = current.path.indexOf('.zip') == current.path.length - 4;
-	}
+		isZIP = extensionsToMount.indexOf( current.ext ) >= 0;
+		trace("Preparing Game: " + current.name);
+		if (isZIP) trace(" - Game will be mounted -");
+	}//---------------------------------------------------;
 	
 	/**
 		Mednafen has a bug with the cheats file.
@@ -478,9 +531,9 @@ class Engine
 			OPLOG = "Cheat file written [OK]";
 		}else
 		{
-			OPLOG = "No Need.";
+			OPLOG = "No need to fix";
 		}
-	}
+	}//---------------------------------------------------;
 	
 	/**
 	   Checks if an autorun is set, checks if the process is already running, and starts it if not.
@@ -488,9 +541,9 @@ class Engine
 	public function checkAutorun()
 	{
 		trace("-> Checking autorun program .");
-		if (path_autorun.length == 0) 
+		if (path_autorun.length < 2)
 		{
-			trace("Autorun not set");
+			trace("  - Autorun not set");
 			return;
 		}
 		
@@ -530,7 +583,7 @@ class Engine
 	
 	/**
 	   Mounts a zip and returns the path it was mounted
-	   @param	p Path of zip
+	   @param	p Path of the mounted file
 	   @return
 	**/
 	function mount_zip(p:String):String
@@ -542,8 +595,10 @@ class Engine
 			// Already Mounted
 		}
 		
+		
 		var res = ChildProcess.execSync('${PSIMO_EXE} list "$p"');
-		var reg = ~/.*\.zip (.*)/ig;
+		
+		var reg = ~/.*\.zip|pfo (.*)/ig;
 		if (reg.match(res))
 		{
 			return reg.matched(1);

@@ -1,0 +1,29 @@
+{
+  "name": "psxmed",
+  "description": "Mednafen PSX Custom Launcher",
+  "license": "",
+  "keywords": [
+    "psx","emulator","launcher","ps1"
+  ],
+  "homepage": "https://github.com/johndimi/psxlauncher",
+  "version": "0.4.0",
+  "author": {
+    "name": "John Dimi",
+    "email": "johndimi@outlook.com"
+  },
+  "engines": { "node": ">= 6.14.1" },
+  "os": [ "win32" ],
+  "cpu": [ "ia32", "x64" ],
+  "preferGlobal": true,
+  "bin": "bin/psxlaunch.js",
+  "files": [
+    "bin/psxlaunch.js",
+    "bin/config_empty.ini"
+  ],
+  "scripts": {
+	"install" : "node ./bin/psxlaunch.js install",
+    "build": "haxe build.hxml && echo #! /usr/bin/env node > bin/temp.js && type bin\\rel.js >> bin/temp.js && uglifyjs bin\\temp.js --compress --mangle -o bin\\psxlaunch.js && del bin\\temp.js bin\\rel.js"
+  },
+  "repository": {},
+  "dependencies": {}
+}
