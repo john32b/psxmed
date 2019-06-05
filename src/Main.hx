@@ -68,23 +68,26 @@ class Main extends BaseApp
 		];
 		
 		ARGS.Options = [
-			['-size', 'Size', 'Set rendering area size. "WIDTH,HEIGHT" or "full" to use the full window area\ne.g. -size 80,20 | -size full','1']
+			['size', 'Size', 'Set rendering area size. "WIDTH,HEIGHT" or "full" to use the full window area\ne.g. -size 80,20 | -size full','1']
 		];
+		
+		FLAG_USE_SLASH_FOR_OPTION = false;
 		
 		#if debug
 			LOG.pipeTrace(); // all traces will redirect to LOG object
-			LOG.setLogFile("a:\\psxlaunch_log.txt", true);
+			LOG.setLogFile("a:\\psxlaunch_log.txt");
 		#end
+		
 		super.init();
 	}//---------------------------------------------------;
 
 	
 	// --
-	override function onExit() 
+	override function onExit(code:Int) 
 	{
 		// Hack for real terminals
 		if (_tui_inited) T.move(0, WM.height); 
-		super.onExit();
+		super.onExit(code);
 	}//---------------------------------------------------;
 	
 	// --
@@ -255,7 +258,6 @@ class Main extends BaseApp
 		
 	}//---------------------------------------------------;
 
-	
 	
 	// --
 	function openOptionsForGame(i:Int)

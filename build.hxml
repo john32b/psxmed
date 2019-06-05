@@ -1,17 +1,12 @@
 # Build release
 
 -lib hxnodejs
--lib djNode
--lib djTui
+-lib djNode:0.4.0
+-lib djTui:0.1.0
 -cp src/
 -main Main
 -js bin/rel.js
-# -dce full
 -D terminal
-# -D analyzer-optimize
 --no-traces
-
-# note -cmd dos command
-# e.g.
-# -cmd copy ./bin/config.ini ./release/
-# -cmd echo Build [OK]
+# -dce full
+# -D analyzer-optimize

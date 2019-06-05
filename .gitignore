@@ -1,3 +1,4 @@
 /dev 
-/bin/app.js
-/bin/app.js.map
+/bin/*.js
+/bin/*.js.map
+thumbs.db

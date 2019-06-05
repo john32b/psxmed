@@ -28,11 +28,8 @@ typedef GameEntry = {
  */
 class Engine 
 {
-	// - Will be appended to final if "use_pfo" is true
-	static var extensions_mountable = ["pfo", "zip"];
-	
-	static var extensionsToSearch = ["cue", "m3u", "zip", "pfo"];
-	static var extensionsToMount = ["pfo", "zip"];
+	static var extensionsToSearch = [".cue", ".m3u", ".zip", ".pfo"];
+	static var extensionsToMount = [".pfo", ".zip"];
 	
 	static var file_config = "config.ini";
 	static var file_config_empty = "config_empty.ini";
@@ -51,6 +48,7 @@ class Engine
 	public var path_autorun:String;
 	public var setting_autosave:Bool;
 	public var setting_pfm:Bool;
+	
 	// AUTOGEN:
 	public var flag_use_ramdrive(default, null):Bool = false;
 	
@@ -105,7 +103,7 @@ class Engine
 		
 		if (!Fs.existsSync(p0))
 		{
-			FileTool.copyFile(p1, p0);
+			FileTool.copyFileSync(p1, p0);
 			return true;
 		}
 	
@@ -229,17 +227,21 @@ class Engine
 			var entry = {
 				name : Path.basename(i, Path.extname(i)),
 				path : i,
-				ext  : Path.extname(i).toLowerCase().substr(1)
+				ext  : FileTool.getFileExt(i)
 			};
 			
 			list_games.push(entry);	
 			
-			if (FileTool.getFileExt(i) == "m3u") m3u.push(i);
+			if (entry.ext == ".m3u") m3u.push(i);
 		}
 		
 		// Open the M3U files and remove their entries from the main DB
+		//  - e.g.
+		//  - Keep 'Final Fantasy VII.m3u' but remove all of the disks from the 
+		//  - main list (disk1,disk2,disk3), so it is cleaner.
 		for (i in m3u)
 		{
+			// FilePaths inside the M3U files:
 			var files = Fs.readFileSync(i).toString().split(Os.EOL);
 			
 			for (ii in files)
@@ -294,12 +296,12 @@ class Engine
 			{
 				var ext = FileTool.getFileExt(f);
 				
-				if (ext == "cue")
+				if (ext == ".cue")
 				{
 					l = f;
 				} else 
 				
-				if (ext == "m3u")
+				if (ext == ".m3u")
 				{
 					l = f; break; // Break because it should only have one .m3u file
 				}
@@ -363,7 +365,7 @@ class Engine
 				trace('$newsave - Already exists - [SKIP]');
 			}else
 			{
-				FileTool.copyFile(i, newsave); 
+				FileTool.copyFileSync(i, newsave); 
 				numCopied++;
 				trace('$newsave - Copied to RAM - [OK]');
 			}
@@ -387,7 +389,7 @@ class Engine
 		for (i in saves_ram)
 		{
 			var dest:String;
-			if (FileTool.getFileExt(i) == "mcr")
+			if (FileTool.getFileExt(i) == ".mcr")
 			{
 				dest = Path.join(path_mednafen, 'sav', Path.basename(i));
 			}else
@@ -403,7 +405,7 @@ class Engine
 			}
 			else
 			{
-				FileTool.copyFile(i, dest);
+				FileTool.copyFileSync(i, dest);
 				trace('$dest - Copied to LOCAL - [OK]');
 				numCopied++;
 			}
@@ -526,7 +528,7 @@ class Engine
 		
 		if (FileTool.pathExists(path_cheat_t))
 		{
-			FileTool.copyFile(path_cheat_t, path_cheat);
+			FileTool.copyFileSync(path_cheat_t, path_cheat);
 			Fs.unlinkSync(path_cheat_t);
 			OPLOG = "Cheat file written [OK]";
 		}else

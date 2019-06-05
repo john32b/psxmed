@@ -1,9 +1,9 @@
 
 PSX Launcher for Mednafen (PSXMED)
  --------------------- 
-**Author** :  John Dimi <johndimi@outlook.com>\
-**Version** : 0.4 (3-2019)\
-**Code**: Haxe compiled to nodejs
+**Author** :  John Dimi <johndimi@outlook.com>  
+**Version** : 0.4  
+**Code**: Haxe compiled to NodeJS  
 
 ##  :question: What is it
 
@@ -13,8 +13,8 @@ This is a very simple **CLI** PS1 game launcher for **Mednafen** that comes with
 - Option to **copy over saves** from mednafen path to a **ramdrive** ( and vice versa )
 - Option to **automatically mount** `.ZIP` archives using the **Psimo File Mount** program and then run those games automatically
 - Provide a fix for mednafen's cheat file not properly being saved.
- 
-:pushpin: This project was created for personal use. But decided to upload to github anyway \
+
+:pushpin: This project was created for personal use. But decided to upload to github anyway  
 As to WHY have these niche features and not a classic launcher, read further below. :pushpin:
 
 ![Launcher Demo Screen](media/demo1.gif)
@@ -39,13 +39,13 @@ As to WHY have these niche features and not a classic launcher, read further bel
 ## :runner: Setting up / Running
 
 ### Installing
-You can install this with **NPM** to be able to launch this from anywhere. *This is recommended*\
+You can install this with **NPM** to be able to launch this from anywhere. *This is recommended*  
 **`npm i https://github.com/johndimi/psxlauncher -g`**
 
 ### Running
-Just call **`psxmed`** from anywhere.\
-**I recommend** calling it from a Windows RUN dialog, so that it opens in a new window\
-Then you must **setup the config file**. \
+Just call **`psxmed`** from anywhere.  
+**I recommend** calling it from a Windows RUN dialog, so that it opens in a new window  
+Then you must **setup the config file**.  
 To quickly open `config.ini` you can run `psxmed cfg` and the file will be opened with the default editor. Else when you run `psxmed` it will inform you that it needs to be configured along with the full path of the config file.
 
 ![Config error message](media/setup_message.png)
@@ -77,20 +77,20 @@ The file is documented.  What you **need to set** for the launcher to boot :
 ### :notebook: ZIP file structure
 
 Make sure the `.zip` filename is the same as the `.cue` or `.m3u` that needs to be loaded inside the archive.
->e.g. The file `"Game - Subtitle (PAL).zip"` must contain `"Game - Subtitle (PAL).cue"`\
+>e.g. The file `"Game - Subtitle (PAL).zip"` must contain `"Game - Subtitle (PAL).cue"`  
 > or `"Game - Subtitle (PAL).m3u"` , to be able to work
-	
+
 ## :wrench: Building
 
 To Build this program you need:
 
 - Some HAXE knowledge is required
-- Haxe 3.4.7 https://haxe.org/
-- djNode https://github.com/johndimi/djNode
-- djTui https://github.com/johndimi/djTui
-- hxnodejs `haxelib install hxnodejs`
+- **Haxe 4.0** https://haxe.org/
+- **djNode V0.4.0** https://github.com/johndimi/djNode -- Get the tag zip
+- **djTui V0.1.0** https://github.com/johndimi/djTui -- Get the tag zip
+- **hxnodejs** `haxelib install hxnodejs`
 
-Optionally **use NPM** to build:
+Then **use NPM** to build:
 `npm run build`
 
 
@@ -102,8 +102,6 @@ I wanted a simple and quick way to launch Mednafen games, and automate a bunch o
 1. Writing savestates all the time can be taxing to an SSD drive.
 2. Loading a savestate will also overwrite all .MCR files. This could accidentally lead to save data loss. Also more re-writes on the SSD drive for no reason.
 3. It is faster to write the savestate on the ramdrive.
-
-
 
 **Why/How mount ZIP files**
 The program `Pismo File Mount` can mount zip files into a virtual folder and then you can load games from there. The launcher can automatically orchestrate the process of mounting/unmounting games as you launch them. Having games in zip format saves space.
