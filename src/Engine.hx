@@ -1,12 +1,24 @@
+/********************************************************************
+ *
+ *
+ *
+ * TODO:
+ *
+ * - update code to work with djNode 0.5+
+ *
+ *******************************************************************/
+
+
 package;
 
+import djNode.BaseApp;
 import djNode.tools.FileTool;
 import djNode.utils.CLIApp;
 import djNode.utils.ProcUtil;
 import haxe.crypto.Md5;
-import hxconf.ConfigFile;
-import js.Error;
+import djA.cfg.ConfigFileB;
 import js.Node;
+import js.lib.Error;
 import js.node.ChildProcess;
 import js.node.Fs;
 import js.node.Os;
@@ -26,20 +38,20 @@ typedef GameEntry = {
 /**
  * PSX Launcher Main Engine
  */
-class Engine 
+class Engine
 {
-	static var extensionsToSearch = [".cue", ".m3u", ".zip", ".pfo"];
-	static var extensionsToMount = [".pfo", ".zip"];
-	
+	static var extensionsNormal = [".cue", ".m3u"];
+	static var extensionsToMount = [".pfo", ".zip", ".cfs"];
+
 	static var file_config = "config.ini";
 	static var file_config_empty = "config_empty.ini";
 	static var MEDNAFEN_EXE = "mednafen.exe";
 	static var PSIMO_EXE = "PFM.exe";
-	
+
 	public static var NAME = "Mednafen PSX Custom Launcher";
-	public static var VER = "0.4";
-	
-	
+	public static var VER = "0.4.1"; //DEV
+
+
 	// -- Read from `CONFIG` file:
 	public var string_size:String;
 	public var path_isos:String;
@@ -48,10 +60,10 @@ class Engine
 	public var path_autorun:String;
 	public var setting_autosave:Bool;
 	public var setting_pfm:Bool;
-	
+
 	// AUTOGEN:
 	public var flag_use_ramdrive(default, null):Bool = false;
-	
+
 	/** All game entries */
 	public var list_games:Array<GameEntry>;
 	/** NAME of game entries */
@@ -61,55 +73,59 @@ class Engine
 			for (i in list_games) r.push(i.name);
 			return r;
 		}
-	
+
 	// Read this error in case of fatal exit
 	public var ERROR:String;
 	// Read this to get operations LOG
 	public var OPLOG:String;
-	
+
 	// -- The engine is working with one game at a time. so
 	//  - Prepared game vars:
-	
+
 	public var current:GameEntry;
 	public var index:Int = -1;
 	public var saves_local:Array<String>; // Fullpath of all LOCAL saves (states+MCR)
 	public var saves_ram:Array<String>;   // Fullpath of all RAM saves   (states+MCR)
-	
+
 	/** Current game name */
 	public var gameName(get, null):String;
-	function get_gameName() {return list_games[index].name; }	
-	
+	function get_gameName() {return list_games[index].name; }
+
 	// Called automatically
 	public var onMednafenExit:Void->Void;
-	
+
 	// If a game needs to be mounted (zip) this will hold the game fill path.
 	// so that it can be unmounted later. It checks for null to figure out mounted game or not.
 	var mountedPath:String = null;
-	
+
 	// Current selected game is ZIP/PFO ( needs to be mounted )
 	public var isZIP:Bool;
-	
+
 	// ===================================================;
-	
-	public function new() 
+
+	public function new()
 	{
 	}//---------------------------------------------------;
-	
+
+	/**
+	   Automatically called upon NPM install? Will create a new skeleton configuration file if needed
+	   @return
+	**/
 	public static function NPM_install():Bool
 	{
 		var cp = Path.dirname(Sys.programPath());
 		var p0 = Path.join(cp, file_config);
 		var p1 = Path.join(cp, file_config_empty);
-		
+
 		if (!Fs.existsSync(p0))
 		{
 			FileTool.copyFileSync(p1, p0);
 			return true;
 		}
-	
+
 		return false;
 	}//---------------------------------------------------;
-	
+
 	/**
 	   Initialize
 	   - Throws errors (read engine.error)
@@ -126,7 +142,7 @@ class Engine
 			ERROR = e;
 			return false;
 		}
-		catch (e:Error)
+		catch (e:js.lib.Error)
 		{
 			trace(e.stack);
 			ERROR = "Config file Parse Error.";
@@ -134,14 +150,14 @@ class Engine
 		}
 		return true;
 	}//---------------------------------------------------;
-	
+
 	static public function getConfigFullpath()
 	{
 		var P = Path.dirname(Sys.programPath());
 		return Path.join(P, Engine.file_config);
 	}//---------------------------------------------------;
-	
-	
+
+
 	public function anySavesRAM():Bool { return saves_ram.length > 0;}
 	public function anySavesLOCAL():Bool { return saves_local.length > 0;}
 
@@ -151,50 +167,49 @@ class Engine
 	**/
 	function loadSettingsFile()
 	{
-		var ini = new ConfigFile();
-		ini.read(Fs.readFileSync(Path.join(Path.dirname(Node.process.argv[1]), file_config), {encoding: "utf8"}));			
-		
-		var cfg = ini.getAll("settings");
-		
+
+		var ini = new ConfigFileB(sys.io.File.getContent( BaseApp.app.getAppPathJoin(file_config) ) );
+		var cfg = ini.data.get('settings');
+
 		string_size = cfg.get("size");
 		path_isos = Path.normalize( cfg.get("isos") );
 		path_mednafen = Path.normalize( cfg.get("mednafen") );
 		path_ramdrive = Path.normalize( cfg.get("ramdrive") );
 		path_autorun  = Path.normalize( cfg.get("autorun") );
 		setting_autosave = Std.parseInt(cfg.get("autosave") ) == 1;
-		
+
 		//-- Checks
-		
+
 		if (path_isos.length < 2)
 		{
 			throw 'ISOPATH not set';
 		}
-		
+
 		if (path_mednafen.length < 2)
 		{
 			throw 'MEDNAFEN PATH not set';
 		}
-		
+
 		if (!FileTool.pathExists(path_isos))
 		{
 			throw 'ISOPATH `$path_isos` does not exist';
 		}
-		
+
 		if (!FileTool.pathExists(path_mednafen))
 		{
 			throw 'MEDNAFEN PATH `$path_mednafen` does not exist';
-		}	
-		
+		}
+
 		if (!FileTool.pathExists(Path.join(path_mednafen,MEDNAFEN_EXE)))
 		{
 			throw 'Can\'t find "$MEDNAFEN_EXE" in "${path_mednafen}"';
-		}	
-		
+		}
+
 		if (flag_use_ramdrive = (path_ramdrive.length > 1))
 		{
 			FileTool.createRecursiveDir(path_ramdrive);
 		}
-	
+
 		trace("Engine : Loading Settings ::");
 		trace(' - Path Isos : ${path_isos}');
 		trace(' - Path Mednafen : ${path_mednafen}');
@@ -203,13 +218,13 @@ class Engine
 		trace(' - FLAG Autosave : ${setting_autosave}');
 		trace(' - FLAG Use RAM : ${flag_use_ramdrive}');
 		trace(' -------- ');
-		
+
 	}//---------------------------------------------------;
-	
-	
+
+
 	/**
 	   : Scans path for games and fills vars
-	   
+
 	   : DEV
 		- Scans all valid extension game files, adds entry to `list_games`
 		- THEN Scans all M3U files and deletes duplicates from the main `list_games`
@@ -218,9 +233,9 @@ class Engine
 	function scanDirectories()
 	{
 		list_games = [];
-		
+
 		var m3u:Array<String> = [];
-		var l = FileTool.getFileListFromDirR(path_isos, extensionsToSearch);
+		var l = FileTool.getFileListFromDirR(path_isos, extensionsNormal.concat(extensionsToMount));
 
 		for (i in l)
 		{
@@ -229,21 +244,21 @@ class Engine
 				path : i,
 				ext  : FileTool.getFileExt(i)
 			};
-			
-			list_games.push(entry);	
-			
+
+			list_games.push(entry);
+
 			if (entry.ext == ".m3u") m3u.push(i);
 		}
-		
+
 		// Open the M3U files and remove their entries from the main DB
 		//  - e.g.
-		//  - Keep 'Final Fantasy VII.m3u' but remove all of the disks from the 
+		//  - Keep 'Final Fantasy VII.m3u' but remove all of the disks from the
 		//  - main list (disk1,disk2,disk3), so it is cleaner.
 		for (i in m3u)
 		{
 			// FilePaths inside the M3U files:
 			var files = Fs.readFileSync(i).toString().split(Os.EOL);
-			
+
 			for (ii in files)
 			{
 				// I can delete in a loop as long as it's in reverse [OK]
@@ -257,65 +272,73 @@ class Engine
 				}
 			}
 		}
-		
+
 		//-- Alphabetize the rezults?
 		list_games.sort(function(a, b) {
 			return a.name.toLowerCase().charCodeAt(0) - b.name.toLowerCase().charCodeAt(0);
 		});
-		
+
 		trace('-> Number of games found : [${list_games.length}]');
-		
+
 		#if debug
 			for (g in list_games) {
 				trace('  - ${g.name} ,${g.path} ');
 			}
 		#end
 	}//---------------------------------------------------;
-	
+
 	/**
 		PRE: A Game is prepared
 	**/
 	public function launchGame():Bool
 	{
 		var g = list_games[index];
-		
+
 		trace('Launching game : ${g.name}');
-		
+
 		/// NEW: Mount the game if it is a zip game
-		
+
 		if (isZIP)
 		{
 			// Mount the .zip then launch
 			mountedPath = mount_zip(g.path);
-			
+
+			// :: This should not happen ever, but check anyway
+			if (mountedPath == null)
+			{
+				ERROR = "Could not parse mounted path";
+				return false;
+			}
+
 			// - Figure out what kind of files are there in the archive
 			// - Prefer M3u files over .Cue files
-			
+
 			var l:String = null; // File to launch
 			for (f in FileTool.getFileListFromDir(mountedPath))
 			{
+				trace("Checking file", f);
 				var ext = FileTool.getFileExt(f);
-				
+
 				if (ext == ".cue")
 				{
 					l = f;
-				} else 
-				
+				} else
+
 				if (ext == ".m3u")
 				{
 					l = f; break; // Break because it should only have one .m3u file
 				}
 			}
-			
+
 			if (l == null)
 			{
 				ERROR = "Archive Error.";
 				unmount(mountedPath);
 				return false;
 			}
-			
+
 			startMednafen(Path.join(mountedPath, l));
-			
+
 		}else
 		{
 			// Normal .cue/.m3u game, Launch normally
@@ -325,8 +348,8 @@ class Engine
 
 		return true;
 	}//---------------------------------------------------;
-	
-	
+
+
 	function startMednafen(p:String)
 	{
 		// Does not work on console emulators like cmder.exe
@@ -341,9 +364,9 @@ class Engine
 					unmount(mountedPath);
 				}
 				if (onMednafenExit != null) onMednafenExit();
-			});		
+			});
 	}//---------------------------------------------------;
-	
+
 	/**
 	   Save Exists locally and ramdrive Exists
 	   Does not re-alter VARS, you need to prepare game again later
@@ -352,10 +375,10 @@ class Engine
 	public function copySave_LocalToRam()
 	{
 		if (saves_local.length == 0) return; // Just in case
-		
+
 		var numCopied:Int = 0;
 		var numTotal:Int = saves_local.length;
-		
+
 		for (i in saves_local)
 		{
 			var newsave = Path.join(path_ramdrive, Path.basename(i));
@@ -365,15 +388,15 @@ class Engine
 				trace('$newsave - Already exists - [SKIP]');
 			}else
 			{
-				FileTool.copyFileSync(i, newsave); 
+				FileTool.copyFileSync(i, newsave);
 				numCopied++;
 				trace('$newsave - Copied to RAM - [OK]');
 			}
 		}
-		
+
 		OPLOG = 'Copied ($numCopied/$numTotal) saves to RAM';
 	}//---------------------------------------------------;
-	
+
 	/**
 	   Copy RAM to LOCAL and overwrite everything
 	   Does not re-alter VARS, you need to prepare game again later
@@ -382,7 +405,7 @@ class Engine
 	public function copySave_RamToLocal()
 	{
 		if (saves_ram.length == 0) return; // Just in case
-		
+
 		var numCopied:Int = 0;
 		var numTotal:Int = saves_ram.length;
 
@@ -396,12 +419,12 @@ class Engine
 			{
 				dest = Path.join(path_mednafen, 'mcs', Path.basename(i));
 			}
-			
+
 			// Check if file is the same, don't overwrite same files
 			// NOTE, dest could not exist yet
 			if (FileTool.pathExists(dest) && filesAreSame(i, dest) )
 			{
-				trace('$dest - already exists with same contents, [SKIPPING]');	
+				trace('$dest - already exists with same contents, [SKIPPING]');
 			}
 			else
 			{
@@ -409,11 +432,11 @@ class Engine
 				trace('$dest - Copied to LOCAL - [OK]');
 				numCopied++;
 			}
-			
+
 		}
 		OPLOG = 'Copied ($numCopied/$numTotal) saves to LOCAL';
 	}//---------------------------------------------------;
-	
+
 	/**
 		Delete a GAME'S saves from the ram
 	*/
@@ -429,7 +452,7 @@ class Engine
 		saves_ram = [];
 		OPLOG = 'Deleted ($c) saves from RAM';
 	}//---------------------------------------------------;
-	
+
 	/**
 	   Delete all State Files (local and RAM)
 	   - Used when you are finished with a game and just want the .SAV file there
@@ -449,8 +472,8 @@ class Engine
 		}
 		OPLOG = 'Deleted ($c) STATES from RAM & LOCAL';
 	}//---------------------------------------------------;
-	
-	
+
+
 	/**
 	   Delete ALL GAMES save data from RAM.
 	   Empty the RAMDRIVE OUT.
@@ -458,7 +481,7 @@ class Engine
 	public function deleteEverything_fromRam()
 	{
 	}//---------------------------------------------------;
-	
+
 
 
 	/** Get local saves, Empty Array for no saves
@@ -479,13 +502,13 @@ class Engine
 		}
 		return ar;
 	}//---------------------------------------------------;
-	
-	
+
+
 	public function getRamSaves(i:Int):Array<String>
 	{
 		var ar:Array<String> = [];
 		if (!flag_use_ramdrive) return ar;
-		
+
 		for (c in 0...2)
 		{
 			var s = Path.join(path_ramdrive, list_games[i].name + '.$c.mcr');
@@ -498,7 +521,7 @@ class Engine
 		}
 		return ar;
 	}//---------------------------------------------------;
-	
+
 
 	/**
 	   Request a game index to be prepared to be launched
@@ -515,7 +538,7 @@ class Engine
 		trace("Preparing Game: " + current.name);
 		if (isZIP) trace(" - Game will be mounted -");
 	}//---------------------------------------------------;
-	
+
 	/**
 		Mednafen has a bug with the cheats file.
 		This copies the temp over the main file.
@@ -525,7 +548,7 @@ class Engine
 	{
 		var path_cheat_t = Path.join(path_mednafen, 'cheats', 'psx.tmpcht');
 		var path_cheat = Path.join(path_mednafen, 'cheats', 'psx.cht');
-		
+
 		if (FileTool.pathExists(path_cheat_t))
 		{
 			FileTool.copyFileSync(path_cheat_t, path_cheat);
@@ -536,7 +559,7 @@ class Engine
 			OPLOG = "No need to fix";
 		}
 	}//---------------------------------------------------;
-	
+
 	/**
 	   Checks if an autorun is set, checks if the process is already running, and starts it if not.
 	**/
@@ -548,21 +571,21 @@ class Engine
 			trace("  - Autorun not set");
 			return;
 		}
-		
+
 		var exe = Path.basename(path_autorun);
-		
+
 		var r = ProcUtil.getTaskPIDs(exe);
 		if (r.length == 0)
 		{
-			var p = ChildProcess.exec('START /I $path_autorun', function(a, b, c){});	
+			var p = ChildProcess.exec('START /I $path_autorun', function(a, b, c){});
 			OPLOG = 'Launched "$exe" [OK]';
 		}else{
 			OPLOG = '"$exe" Already running';
 		}
-		
+
 		trace(OPLOG);
 	}//---------------------------------------------------;
-	
+
 
 	/** Prints some infos about current state */
 	public function info()
@@ -573,7 +596,7 @@ class Engine
 		trace("LOCAL SAVES ::", saves_local);
 		trace("RAM SAVES ::", saves_ram);
 	}//---------------------------------------------------;
-		
+
 	/**
 	   Checks the MD5 of two files
 	   a and b are FULLPATHS
@@ -582,7 +605,7 @@ class Engine
 	{
 		return FileTool.getFileMD5(a) == FileTool.getFileMD5(b);
 	}//---------------------------------------------------;
-	
+
 	/**
 	   Mounts a zip and returns the path it was mounted
 	   @param	p Path of the mounted file
@@ -596,20 +619,23 @@ class Engine
 		{
 			// Already Mounted
 		}
-		
-		
+
 		var res = ChildProcess.execSync('${PSIMO_EXE} list "$p"');
-		
-		var reg = ~/.*\.zip|pfo (.*)/ig;
+
+		// I wanted it to be a non capturing () but it doesn't work?
+		//var reg = ~/.*(?>\.zip|\.pfo) (.*)/ig; // needs matched(1)
+
+		var reg = ~/.*(\.zip|\.pfo|\.cfs) (.*)/ig; // This needs matched(2)
+
 		if (reg.match(res))
 		{
-			return reg.matched(1);
+			return reg.matched(2);
 		}else
 		{
 			return null;
 		}
-	}
-	
+	}//---------------------------------------------------;
+
 	/**
 	   Unmounts a mounted zip
 	   @param	p Either the Mounted path or Source Zip file
@@ -623,6 +649,6 @@ class Engine
 			// Already UNMounted
 		}
 	}
-	
-	
+
+
 }// -

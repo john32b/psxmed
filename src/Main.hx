@@ -23,73 +23,73 @@ import haxe.Timer;
  */
 class Main extends BaseApp
 {
-	
-	// Standard program entry 
+
+	// Standard program entry
 	static public function main() { new Main(); }
-	
+
 	static var WIDTH = 80;
 	static var HEIGHT = 25;
-	
+
 	static var WIDTH_MIN = 60;
 	static var HEIGHT_MIN = 20;
-	
+
 	static var STATUS_POPUP_TIME:Int = 3000;
-	
+
 	// Instance for the app engine
 	var engine:Engine;
-	
+
 	// Hold the windows
 	var winOptions:Window;
 	var winList:Window;
 	var winInfo:Window;
 	var winLog:Window;
-	
+
 	// Quick Pointers for the `Game Menu` buttons
 	var winOptBtns:Array<Button>;
-	
+
 	var _tui_inited:Bool = false;
-	
-	// Helper 
+
+	// Helper
 	var size_W2 = [25, 5];
 	//====================================================;
 
 	// --
-	override function init() 
+	override function init()
 	{
 		PROGRAM_INFO = {
 			name:Engine.NAME,
 			version:Engine.VER,
 			author:"JohnDimi"
 		};
-		
+
 		ARGS.Actions = [
 			['cfg', 'Config', "Opens the config file with the associated OS editor"],
 			['install','-install','Called by the NPM installer to create the config file']
 		];
-		
+
 		ARGS.Options = [
 			['size', 'Size', 'Set rendering area size. "WIDTH,HEIGHT" or "full" to use the full window area\ne.g. -size 80,20 | -size full','1']
 		];
-		
+
 		FLAG_USE_SLASH_FOR_OPTION = false;
-		
+
 		#if debug
 			LOG.pipeTrace(); // all traces will redirect to LOG object
 			LOG.setLogFile("a:\\psxlaunch_log.txt");
 		#end
-		
+
 		super.init();
 	}//---------------------------------------------------;
 
-	
+
 	// --
-	override function onExit(code:Int) 
+	override function onExit(code:Int)
 	{
 		// Hack for real terminals
-		if (_tui_inited) T.move(0, WM.height); 
+		if (_tui_inited) T.move(0, WM.height + 1);
 		super.onExit(code);
 	}//---------------------------------------------------;
-	
+
 	// --
 	function parseSetSize(strval:String)
 	{
@@ -103,11 +103,12 @@ class Main extends BaseApp
 			// Does not check for maximum?
 		}
 	}//---------------------------------------------------;
-	
+
 	// User Main entry ::
 	// --
-	override function onStart() 
+	override function onStart()
 	{
+		// Called when getting installed by NPM
 		if (argsAction == "install")
 		{
 			if (Engine.NPM_install())
@@ -119,32 +120,32 @@ class Main extends BaseApp
 			}
 			return;
 		}
-		
+
 		// - First check for input parameters
 		if (argsAction == "cfg")
 		{
-			T.printf('Opening configuration file...');
+			T.ptag('Opening configuration file...');
 			Sys.command('start ${Engine.getConfigFullpath()}');
 			return;
 		}
-		
+
 		// -- Create the Main Engine
 		engine = new Engine();
-		if (!engine.init()) 
+		if (!engine.init())
 		{
 			printBanner();
-			T.printf('\n ~red~INIT ERROR : ~!~${engine.ERROR}');
-			T.printf('\n ~yellow~Settings file : ~!~' + Engine.getConfigFullpath());
-			T.printf('\n You can also run ~yellow~psxmed cfg~!~ to open the config file');
+			T.ptag('\n <red>INIT ERROR : <!>${engine.ERROR}');
+			T.ptag('\n <yellow>Settings file : <!>' + Engine.getConfigFullpath());
+			T.ptag('\n You can also run <yellow>psxmed cfg<!> to open the config file');
 			T.endl();
 			waitKeyQuit();
 			return;
 		}
-		
+
 		if (engine.string_size != null) parseSetSize(engine.string_size);
-		
+
 		// Prioritize argument size over config.ini size
-		if (argsOptions.size != null) 
+		if (argsOptions.size != null)
 		{
 			if (argsOptions.size == "full") {
 				WIDTH = T.getWidth();
@@ -153,21 +154,21 @@ class Main extends BaseApp
 				parseSetSize(argsOptions.size);
 			}
 		}// --
-		
+
 		// Initialize TUI:
 		T.setTitle(Engine.NAME);
 		T.resizeTerminal(WIDTH, HEIGHT);
 		T.pageDown();
 		T.clearScreen();
 		T.cursorHide();
-		
+
 		// --
 		WM.create( new InputObj(), new TerminalObj(), WIDTH, HEIGHT, "black.1", "blue.1");
 		WM.set_TAB_behavior("WINDOW", "exit");
 		_tui_inited = true;
-		
+
 		engine.onMednafenExit = onGameExit;
-	
+
 		// Create the windows :
 		// ------------------------------
 
@@ -186,7 +187,7 @@ class Main extends BaseApp
 			winList.listen(function(a, b){
 				if (a == "escape") {
 					WM.popupConfirm(function(){
-						Sys.exit(0); 
+						Sys.exit(0);
 					}, "QUIT");
 				}
 			});
@@ -194,15 +195,15 @@ class Main extends BaseApp
 		// -
 		create_header_footer();
 		create_info();
-			
+
 		// -- Game Options
-		// -- 
+		// --
 		winOptions = new Window("options", 20, 5, Styles.win.get("red.1"));
 			winOptions.posNext(winList, 2).move(0, 2);
-			winOptions.isOptionsPopup(); // Make it behave like a quick popup	
+			winOptions.isOptionsPopup(); // Make it behave like a quick popup
 			winOptions.addStack(new Button("b1", "Launch"));
 			winOptions.addSeparator();
-			
+
 			winOptBtns = [];
 			if (engine.flag_use_ramdrive)
 			{
@@ -213,10 +214,10 @@ class Main extends BaseApp
 				winOptBtns.push(cast winOptions.addStack(new Button("b5", "Delete all States").extra("?Delete States from RAM + LOCAL?")));
 				winOptions.addSeparator();
 			}
-			
+
 			winOptions.addStack(new Button("", "Close").extra("close"));
 			winOptions.listen(listen_Options);
-			
+
 		// - Utility Window
 		// -
 		var w2 = new MenuBar("utility", 1, 0);
@@ -235,17 +236,17 @@ class Main extends BaseApp
 			}
 			WM.A.screen(w2, "right", "top", 1);
 			w2.open();
-			
-			
+
+
 		//- Quick popup text info
-		//-  
+		//-
 		winLog = new Window('winlog', w2.width, 1);
 		winLog.padding(0, 0);
 		winLog.modifyStyle({ text:"yellow",borderStyle:0});
 		winLog.flag_focusable = false;
 		winLog.addStack(new Label("",winLog.inWidth,"center").setSID("log"));
 		WM.A.down(winLog, w2, 0, 1);
-		
+
 		// --
 		if (engine.list_games.length == 0)
 		{
@@ -255,10 +256,10 @@ class Main extends BaseApp
 			}, 40, null, false);
 			return;
 		}
-		
+
 	}//---------------------------------------------------;
 
-	
+
 	// --
 	function openOptionsForGame(i:Int)
 	{
@@ -274,7 +275,7 @@ class Main extends BaseApp
 		}
 		winOptions.open(true);
 	}//---------------------------------------------------;
-	
+
 
 	// --
 	function listen_Options(a:String, b:BaseElement)
@@ -283,14 +284,14 @@ class Main extends BaseApp
 		{
 			// Repoen the same, to recheck button status
 			openOptionsForGame(engine.index);
-			
+
 			// Show the previous operation LOG
 			if (engine.OPLOG != null)
 			{
 				openLogStatus(engine.OPLOG);
 			}
 		}
-		
+
 		if (a == "close")
 		{
 			winInfo.close();
@@ -303,17 +304,17 @@ class Main extends BaseApp
 		if (a == "fire") switch (b.SID)
 		{
 			case "b1":
-				
+
 				winOptions.close();
-				
+
 				if (!engine.launchGame())
 				{
 					openLogStatus(engine.ERROR);
 					return;
 				}
-				
+
 				openGameLaunchWindow();
-				
+
 			case "b2":
 				engine.copySave_LocalToRam();
 				opEnd();
@@ -327,28 +328,28 @@ class Main extends BaseApp
 				engine.deleteGameStates_fromEveryWhere();
 				opEnd();
 			default:
-			
+
 		}
 	}//---------------------------------------------------;
-	
-	
+
+
 	var pop:Window;
 	function openGameLaunchWindow()
 	{
 		winList.close();
 		pop = MessageBox.create("Now Playing:\n" + engine.gameName , 3, null, 40, Styles.win.get("gray.1"));
 	}//---------------------------------------------------;
-	
+
 	// Autocalled from engine whenever mednafen exits
 	function onGameExit()
 	{
-		if (pop != null) pop.close(); 
+		if (pop != null) pop.close();
 		pop = null;
 		winList.open(true);
 	}//---------------------------------------------------;
-	
-	
-	/** 
+
+
+	/**
 	 * Creates and adds a header/footer to the TUI
 	 */
 	function create_header_footer()
@@ -363,7 +364,7 @@ class Main extends BaseApp
 			});
 			head.padding(2, 0);
 			head.addStack(new Label(PROGRAM_INFO.name + " v" + PROGRAM_INFO.version));
-		
+
 		// : Footer
 		var foot = new Window( -1, 1);
 			foot.flag_focusable = false;
@@ -373,15 +374,15 @@ class Main extends BaseApp
 			});
 			foot.addStack(new Label("[TAB] = FOCUS | [↑↓] = MOVE | [ENTER] = SELECT | [ESC] = BACK", foot.inWidth, "center"));
 			foot.pos(0, WM.height - foot.height);
-			
+
 		WM.add(head);
 		WM.add(foot);
 	}//---------------------------------------------------;
 
-	
-	
-	/** 
-		Create and add info window 
+
+
+	/**
+		Create and add info window
 		- Small banner text on game information below main window
 	*/
 	var inf_name:Label;
@@ -390,31 +391,31 @@ class Main extends BaseApp
 	var inf_ZIP:Label;
 	function create_info()
 	{
-		
+
 		winInfo = new Window( -1, 2, Styles.win.get('black.1'));
 		winInfo.padding(2, 0);
 		winInfo.borderStyle = 0;
-		
+
 			inf_name = new Label("", winInfo.inWidth - 13);
 			inf_name.setColor("yellow");
 			//inf_name.scroll(125);
-			
+
 		winInfo.addStackInline([new Label("Game Name : "), inf_name]);
 		winInfo.flag_focusable = false;
 		WM.A.down(winInfo, winList);
-		
+
 		inf_RAM = new Button("", "   ", 1);
 		inf_LOCAL = new Button("", "   ", 1);
 		inf_ZIP = cast new Label("").setColor("cyan");
-		
+
 		winInfo.addStackInline([
 			new Label("Save on RAM"), inf_RAM,
 			new Label("Save Local"), inf_LOCAL, inf_ZIP]);
 	}//---------------------------------------------------;
-	
-	
+
+
 	/**
-	   Show a quick status popup 
+	   Show a quick status popup
 	   @param	s
 	**/
 	var winTimer:Timer;
@@ -423,28 +424,28 @@ class Main extends BaseApp
 		var l:Label = cast winLog.getElIndex(1);
 			l.text = s;
 			winLog.open();
-			
+
 		if (winTimer != null) {
 			winTimer.stop();
 			winTimer = null;
 		}
-		
+
 		winTimer = Timer.delay(function(){
 			winLog.close();
 		}, STATUS_POPUP_TIME);
 	}//---------------------------------------------------;
-	
-	
+
+
 	/** Open game info with current prepared games */
 	function openGameInfo()
 	{
 		inf_name.text = engine.current.name + "     ";
-		
+
 		if (inf_name.text.length > inf_name.width)
 			inf_name.scroll(125);
 		else
 			inf_name.stop();
-			
+
 		if (engine.saves_ram.length > 0){
 			inf_RAM.text = "YES";
 			inf_RAM.colorIdle("green");
@@ -461,15 +462,15 @@ class Main extends BaseApp
 			inf_LOCAL.text = "NO";
 			inf_LOCAL.colorIdle("red");
 		}
-		
+
 		if (engine.isZIP){
 			inf_ZIP.text = "(zipped)";
 		}else{
 			inf_ZIP.text = "";
 		}
-		
+
 		winInfo.open();
 	}//---------------------------------------------------;
-	
+
 
 }//-- end class --
