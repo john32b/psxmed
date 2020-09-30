@@ -23,7 +23,7 @@
     <option flashStrict="False" />
     <option noInlineOnDebug="False" />
     <option mainClass="Main" />
-    <option enabledebug="True" />
+    <option enabledebug="False" />
     <option additional="" />
   </build>
   <!-- haxelib libraries -->

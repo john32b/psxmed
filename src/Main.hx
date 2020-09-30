@@ -23,16 +23,13 @@ import haxe.Timer;
  */
 class Main extends BaseApp
 {
-
 	// Standard program entry
 	static public function main() { new Main(); }
 
 	static var WIDTH = 80;
 	static var HEIGHT = 25;
-
 	static var WIDTH_MIN = 60;
 	static var HEIGHT_MIN = 20;
-
 	static var STATUS_POPUP_TIME:Int = 3000;
 
 	// Instance for the app engine
@@ -44,13 +41,12 @@ class Main extends BaseApp
 	var winInfo:Window;
 	var winLog:Window;
 
-	// Quick Pointers for the `Game Menu` buttons
+	// Quick Pointers for the `Game Menu` RAMDRIVE buttons
 	var winOptBtns:Array<Button>;
 
-	var _tui_inited:Bool = false;
 
-	// Helper
-	var size_W2 = [25, 5];
+	var winNowPlaying:Window;
+
 	//====================================================;
 
 	// --
@@ -63,12 +59,12 @@ class Main extends BaseApp
 		};
 
 		ARGS.Actions = [
-			['cfg', 'Config', "Opens the config file with the associated OS editor"],
-			['install','-install','Called by the NPM installer to create the config file']
+			['cfg', "Opens the config file with the associated OS editor"],
+			['install', "-Called by the NPM installer to create the config file"]
 		];
 
 		ARGS.Options = [
-			['size', 'Size', 'Set rendering area size. "WIDTH,HEIGHT" or "full" to use the full window area\ne.g. -size 80,20 | -size full','1']
+			['size', 'Set rendering area size. "WIDTH,HEIGHT" or "full" to use the full window area\ne.g. -size 80,20 | -size full', '1']
 		];
 
 		FLAG_USE_SLASH_FOR_OPTION = false;
@@ -81,58 +77,37 @@ class Main extends BaseApp
 		super.init();
 	}//---------------------------------------------------;
 
-
-	// --
+	// Hack for real terminals. Put the cursor at the end of the
 	override function onExit(code:Int)
 	{
-		// Hack for real terminals
-		if (_tui_inited) T.move(0, WM.height + 1);
+		if (code == 0 && WM._isInited) T.move(0, WM.height + 1);
 		super.onExit(code);
 	}//---------------------------------------------------;
 
 	// --
-	function parseSetSize(strval:String)
-	{
-		var s = cast(strval, String).split(',');
-		if (s != null && s.length == 2)
-		{
-			var w = Std.parseInt(s[0]);
-			var h = Std.parseInt(s[1]);
-			if (w > WIDTH_MIN) WIDTH = w; else WIDTH = WIDTH_MIN;
-			if (h > HEIGHT_MIN) HEIGHT = h else HEIGHT = HEIGHT_MIN;
-			// Does not check for maximum?
-		}
-	}//---------------------------------------------------;
-
 	// User Main entry ::
-	// --
 	override function onStart()
 	{
-		// Called when getting installed by NPM
-		if (argsAction == "install")
-		{
-			if (Engine.NPM_install())
-			{
+		// -- Called when getting installed by NPM
+		if (argsAction == "install") {
+			if (Engine.NPM_install()) {
 				T.print("- Created empty config file OK");
-			}else
-			{
+			}else{
 				T.print("- Config file already exists from previous installation. Leaving as is.");
 			}
 			return;
-		}
+		}//------
 
-		// - First check for input parameters
-		if (argsAction == "cfg")
-		{
+		// - First check this now, before creating the engine
+		if (argsAction == "cfg") {
 			T.ptag('Opening configuration file...');
 			Sys.command('start ${Engine.getConfigFullpath()}');
 			return;
-		}
+		}//------
 
 		// -- Create the Main Engine
 		engine = new Engine();
-		if (!engine.init())
-		{
+		if (!engine.init()) {
 			printBanner();
 			T.ptag('\n <red>INIT ERROR : <!>${engine.ERROR}');
 			T.ptag('\n <yellow>Settings file : <!>' + Engine.getConfigFullpath());
@@ -140,55 +115,48 @@ class Main extends BaseApp
 			T.endl();
 			waitKeyQuit();
 			return;
+		}//------
+
+
+		if (engine.list_games.length == 0) {
+			printBanner();
+			T.ptag(' - No games found in <yellow>"${engine.path_isos}"<!>\n');
+			waitKeyQuit();
+			return;
 		}
 
-		if (engine.string_size != null) parseSetSize(engine.string_size);
-
-		// Prioritize argument size over config.ini size
-		if (argsOptions.size != null)
-		{
+		// -- Get size from config or parameter. Parameter can override
+		parseSetSize(engine.terminal_size);
+		if (argsOptions.size != null) {
 			if (argsOptions.size == "full") {
 				WIDTH = T.getWidth();
 				HEIGHT = T.getHeight();
 			}else{
 				parseSetSize(argsOptions.size);
 			}
-		}// --
+		}//------
 
-		// Initialize TUI:
+		// -- Initialize TUI:
 		T.setTitle(Engine.NAME);
 		T.resizeTerminal(WIDTH, HEIGHT);
-		T.pageDown();
-		T.clearScreen();
-		T.cursorHide();
-
-		// --
+		T.pageDown(); T.clearScreen(); T.cursorHide();
 		WM.create( new InputObj(), new TerminalObj(), WIDTH, HEIGHT, "black.1", "blue.1");
-		WM.set_TAB_behavior("WINDOW", "exit");
-		_tui_inited = true;
 
-		engine.onMednafenExit = onGameExit;
-
-		// Create the windows :
-		// ------------------------------
-
-		// - Main window Listing all games
-		winList = new Window("main", WIDTH - size_W2[0] - 4 - 4, HEIGHT - 7);
+		// -- Main window Listing all games
+		winList = new Window("main", WIDTH - 25 - 4 - 4, HEIGHT - 7);
 			winList.pos(3, 3);
 			winList.addStack(new Label("Available Games").setColor("green"));
 			winList.addSeparator();
 			// --
 			var l = new VList(winList.inWidth, winList.inHeight - 2);
 				l.setData(engine.list_names);
-				l.onSelect = openOptionsForGame;
-				l.flag_letter_jump = true;
+				l.onSelect = onGameSelect;
+				l.flag_letter_jump = true;	// Pressing a letter will jump to it
 			winList.addStack(l);
 			winList.open(true);
-			winList.listen(function(a, b){
-				if (a == "escape") {
-					WM.popupConfirm(function(){
-						Sys.exit(0);
-					}, "QUIT");
+			winList.listen((m, el)->{
+				if (m == "escape") { /* Escape Key */
+					WM.popupConfirm(()->Sys.exit(0), "QUIT");
 				}
 			});
 
@@ -197,10 +165,9 @@ class Main extends BaseApp
 		create_info();
 
 		// -- Game Options
-		// --
 		winOptions = new Window("options", 20, 5, Styles.win.get("red.1"));
 			winOptions.posNext(winList, 2).move(0, 2);
-			winOptions.isOptionsPopup(); // Make it behave like a quick popup
+			winOptions.setPopupBehavior(); // Make it behave like a quick popup
 			winOptions.addStack(new Button("b1", "Launch"));
 			winOptions.addSeparator();
 
@@ -216,58 +183,53 @@ class Main extends BaseApp
 			}
 
 			winOptions.addStack(new Button("", "Close").extra("close"));
-			winOptions.listen(listen_Options);
+			winOptions.listen(onWindowEvent_Options);
 
-		// - Utility Window
-		// -
-		var w2 = new MenuBar("utility", 1, 0);
-			w2.setPanelStyle("gray", "darkgray", -1);
-			w2.setItemStyle("left", 0, 1, 1, 1, 1);
-			w2.setItems(["FixCheats", "About"]);
-			w2.onSelect = function(ind){
+		// -- Menu Bar
+		var w2 = new MenuBar(1, 3, {grid:true, bs:1});
+			w2.setItems(["FixCheats", "About", "Quit"]);
+			WM.A.screen(w2, "r", "t", 1);
+			w2.open();
+			w2.flag_lock_focus = false;
+			w2.onSelect = (ind)-> {
 				switch(ind){
 					case 0:
-					engine.fixCheats();
-					openLogStatus(engine.OPLOG);
+						engine.fixCheats();
+						openLogStatus(engine.OPLOG);
 					case 1:
-					MessageBox.create("Mednafen launcher\nCreated by JohnDimi, using Haxe", 0, null, 40, true);
+
+						w2.flag_return_focus_once = true;
+						MessageBox.create("Mednafen launcher\nCreated by JohnDimi, using Haxe", 3, null, 40, true);
+					case 2:
+						Sys.exit(0);
 					default:
 				}
 			}
-			WM.A.screen(w2, "right", "top", 1);
-			w2.open();
 
-
-		//- Quick popup text info
-		//-
-		winLog = new Window('winlog', w2.width, 1);
-		winLog.padding(0, 0);
-		winLog.modifyStyle({ text:"yellow",borderStyle:0});
+		//-- Quick popup text info, opens when a game launches
+		winLog = new Window(w2.width, 1);
 		winLog.flag_focusable = false;
-		winLog.addStack(new Label("",winLog.inWidth,"center").setSID("log"));
+		winLog.padding(0, 0);
+		winLog.modStyle({ text:"yellow", borderStyle:0});
+		winLog.addStack(new Label("", winLog.inWidth, "center").setSID("log"));
 		WM.A.down(winLog, w2, 0, 1);
 
-		// --
-		if (engine.list_games.length == 0)
-		{
-			trace("NO GAMES FOUND -- EXITING --");
-			MessageBox.create('No games found', 0, function(a){
-				Sys.exit(0);
-			}, 40, null, false);
-			return;
-		}
-
+		// -- Init some other things
+		engine.onMednafenExit = ()->{
+			if (winNowPlaying != null) { winNowPlaying.close(); winNowPlaying = null; }
+			winList.open(true);
+		};
 	}//---------------------------------------------------;
 
 
 	// --
-	function openOptionsForGame(i:Int)
+	// From the main window, a game was clicked
+	// - Open the game options window
+	function onGameSelect(i:Int)
 	{
 		engine.prepareGame(i);
 		// Only bother with checking if RAMDRIVE is enabled
-		if (engine.flag_use_ramdrive)
-		{
-			// hard coded
+		if (engine.flag_use_ramdrive) {
 			winOptBtns[0].disabled = !engine.anySavesLOCAL();
 			winOptBtns[1].disabled = !engine.anySavesRAM();
 			winOptBtns[2].disabled = winOptBtns[1].disabled;
@@ -277,13 +239,13 @@ class Main extends BaseApp
 	}//---------------------------------------------------;
 
 
-	// --
-	function listen_Options(a:String, b:BaseElement)
+	// Window Events listener for the Game Options Window
+	function onWindowEvent_Options(a:String, b:BaseElement)
 	{
 		function opEnd()
 		{
 			// Repoen the same, to recheck button status
-			openOptionsForGame(engine.index);
+			onGameSelect(engine.index);
 
 			// Show the previous operation LOG
 			if (engine.OPLOG != null)
@@ -313,7 +275,8 @@ class Main extends BaseApp
 					return;
 				}
 
-				openGameLaunchWindow();
+				winList.close();
+				winNowPlaying = MessageBox.create("Now Playing:\n" + engine.gameName , 3, null, 40, Styles.win.get("gray.1"));
 
 			case "b2":
 				engine.copySave_LocalToRam();
@@ -333,72 +296,22 @@ class Main extends BaseApp
 	}//---------------------------------------------------;
 
 
-	var pop:Window;
-	function openGameLaunchWindow()
-	{
-		winList.close();
-		pop = MessageBox.create("Now Playing:\n" + engine.gameName , 3, null, 40, Styles.win.get("gray.1"));
-	}//---------------------------------------------------;
-
-	// Autocalled from engine whenever mednafen exits
-	function onGameExit()
-	{
-		if (pop != null) pop.close();
-		pop = null;
-		winList.open(true);
-	}//---------------------------------------------------;
 
 
-	/**
-	 * Creates and adds a header/footer to the TUI
-	 */
-	function create_header_footer()
-	{
-		// -- Header Footer
-		// : Header
-		var head = new Window( -1, 1);
-			head.flag_focusable = false;
-			// By default all windows use the default `WM.global_style_win`
-			head.modifyStyle({
-				bg:"darkcyan", text:"black", borderStyle:0, borderColor:{fg:"darkblue"}
-			});
-			head.padding(2, 0);
-			head.addStack(new Label(PROGRAM_INFO.name + " v" + PROGRAM_INFO.version));
-
-		// : Footer
-		var foot = new Window( -1, 1);
-			foot.flag_focusable = false;
-			foot.padding(0);
-			foot.modifyStyle({
-				bg:"gray", text:"darkblue", borderStyle:0
-			});
-			foot.addStack(new Label("[TAB] = FOCUS | [↑↓] = MOVE | [ENTER] = SELECT | [ESC] = BACK", foot.inWidth, "center"));
-			foot.pos(0, WM.height - foot.height);
-
-		WM.add(head);
-		WM.add(foot);
-	}//---------------------------------------------------;
-
-
-
-	/**
-		Create and add info window
-		- Small banner text on game information below main window
-	*/
+	// - Sub Function
+	// - Create and add info window (Small banner text on game information below main window)
 	var inf_name:Label;
 	var inf_RAM:Button;
 	var inf_LOCAL:Button;
 	var inf_ZIP:Label;
 	function create_info()
 	{
-
 		winInfo = new Window( -1, 2, Styles.win.get('black.1'));
 		winInfo.padding(2, 0);
 		winInfo.borderStyle = 0;
 
 			inf_name = new Label("", winInfo.inWidth - 13);
 			inf_name.setColor("yellow");
-			//inf_name.scroll(125);
 
 		winInfo.addStackInline([new Label("Game Name : "), inf_name]);
 		winInfo.flag_focusable = false;
@@ -413,10 +326,37 @@ class Main extends BaseApp
 			new Label("Save Local"), inf_LOCAL, inf_ZIP]);
 	}//---------------------------------------------------;
 
+	// - Sub Function
+	// Creates and adds a header/footer to the TUI
+	function create_header_footer()
+	{
+		// -- Header Footer
+		// : Header
+		var head = new Window( -1, 1);
+			head.flag_focusable = false;
+			// By default all windows use the default `WM.global_style_win`
+			head.modStyle({
+				bg:"darkcyan", text:"black", borderStyle:0, borderColor:{fg:"darkblue"}
+			});
+			head.padding(2, 0);
+			head.addStack(new Label(PROGRAM_INFO.name + " v" + PROGRAM_INFO.version));
 
+		// : Footer
+		var foot = new Window( -1, 1);
+			foot.flag_focusable = false;
+			foot.padding(0);
+			foot.modStyle({
+				bg:"gray", text:"darkblue", borderStyle:0
+			});
+			foot.addStack(new Label("[TAB] = FOCUS | [↑↓] = MOVE | [ENTER] = SELECT | [ESC] = BACK", foot.inWidth, "center"));
+			foot.pos(0, WM.height - foot.height);
+
+		WM.add(head);
+		WM.add(foot);
+	}//---------------------------------------------------;
 	/**
-	   Show a quick status popup
-	   @param	s
+	   Show a quick status popup. General Purpose
+	   @param	s Message
 	**/
 	var winTimer:Timer;
 	function openLogStatus(s:String)
@@ -424,12 +364,10 @@ class Main extends BaseApp
 		var l:Label = cast winLog.getElIndex(1);
 			l.text = s;
 			winLog.open();
-
 		if (winTimer != null) {
 			winTimer.stop();
 			winTimer = null;
 		}
-
 		winTimer = Timer.delay(function(){
 			winLog.close();
 		}, STATUS_POPUP_TIME);
@@ -470,6 +408,19 @@ class Main extends BaseApp
 		}
 
 		winInfo.open();
+	}//---------------------------------------------------;
+
+
+	// Set the Width/Height from a string like "80,20"
+	function parseSetSize(strval:String)
+	{
+		var s = cast(strval, String).split(',');
+		if (s != null && s.length == 2) {
+			WIDTH = cast Math.max(Std.parseInt(s[0]), WIDTH_MIN);
+			HEIGHT = cast Math.max(Std.parseInt(s[1]), HEIGHT_MIN);
+		}else{
+			throw "Cannot read Size from " + strval;
+		}
 	}//---------------------------------------------------;
 
 

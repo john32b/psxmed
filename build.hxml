@@ -1,8 +1,11 @@
 # Build release
+# PSX Launcher for Mednafen
+# ---------------------------
 
--lib hxnodejs
--lib djNode:0.4.0
--lib djTui:0.1.0
+-cmd Echo Building PSXMED Release
+
+-lib djNode
+-lib djTui
 -cp src/
 -main Main
 -js bin/rel.js

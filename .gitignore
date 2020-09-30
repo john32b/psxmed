@@ -2,3 +2,4 @@
 /bin/*.js
 /bin/*.js.map
 thumbs.db
+/src/Test*

@@ -1,9 +1,6 @@
 /********************************************************************
  *
- *
- *
  * TODO:
- *
  * - update code to work with djNode 0.5+
  *
  *******************************************************************/
@@ -53,13 +50,13 @@ class Engine
 
 
 	// -- Read from `CONFIG` file:
-	public var string_size:String;
 	public var path_isos:String;
 	public var path_mednafen:String;
 	public var path_ramdrive:String;
 	public var path_autorun:String;
+	public var terminal_size:String;
 	public var setting_autosave:Bool;
-	public var setting_pfm:Bool;
+	public var pismo_enable:Bool;
 
 	// AUTOGEN:
 	public var flag_use_ramdrive(default, null):Bool = false;
@@ -133,6 +130,8 @@ class Engine
 	**/
 	public function init():Bool
 	{
+		CLIApp.FLAG_LOG_QUIET = false;
+
 		try{
 			loadSettingsFile();
 			scanDirectories();
@@ -148,13 +147,13 @@ class Engine
 			ERROR = "Config file Parse Error.";
 			return false;
 		}
+
 		return true;
 	}//---------------------------------------------------;
 
 	static public function getConfigFullpath()
 	{
-		var P = Path.dirname(Sys.programPath());
-		return Path.join(P, Engine.file_config);
+		return BaseApp.app.getAppPathJoin(Engine.file_config);
 	}//---------------------------------------------------;
 
 
@@ -171,12 +170,13 @@ class Engine
 		var ini = new ConfigFileB(sys.io.File.getContent( BaseApp.app.getAppPathJoin(file_config) ) );
 		var cfg = ini.data.get('settings');
 
-		string_size = cfg.get("size");
+		terminal_size = cfg.get("size");
 		path_isos = Path.normalize( cfg.get("isos") );
 		path_mednafen = Path.normalize( cfg.get("mednafen") );
 		path_ramdrive = Path.normalize( cfg.get("ramdrive") );
 		path_autorun  = Path.normalize( cfg.get("autorun") );
 		setting_autosave = Std.parseInt(cfg.get("autosave") ) == 1;
+		pismo_enable = Std.parseInt(cfg.get("pismo_enable") ) == 1;
 
 		//-- Checks
 
@@ -192,7 +192,7 @@ class Engine
 
 		if (!FileTool.pathExists(path_isos))
 		{
-			throw 'ISOPATH `$path_isos` does not exist';
+			throw 'ISOPATH "$path_isos" does not exist';
 		}
 
 		if (!FileTool.pathExists(path_mednafen))
@@ -215,8 +215,9 @@ class Engine
 		trace(' - Path Mednafen : ${path_mednafen}');
 		trace(' - Path RAMDRIVE : ${path_ramdrive}');
 		trace(' - Path Autorun : ${path_autorun}');
-		trace(' - FLAG Autosave : ${setting_autosave}');
-		trace(' - FLAG Use RAM : ${flag_use_ramdrive}');
+		trace(' - Enable Pismo : ${pismo_enable}');
+		trace(' - Autosave : ${setting_autosave}');
+		trace(' - Use RAM : ${flag_use_ramdrive}');
 		trace(' -------- ');
 
 	}//---------------------------------------------------;
@@ -353,18 +354,19 @@ class Engine
 	function startMednafen(p:String)
 	{
 		// Does not work on console emulators like cmder.exe
-		// #DEVNOTE: need to use "start /I" to launch withing fake terminals
-		//			 -Does not work with 'execFile'
-		var p = ChildProcess.exec('START /I $MEDNAFEN_EXE "${p}"', {
-				cwd:path_mednafen
-			},
-			function(a,b,c){
+		// DEV : - Need to use "start /I" to launch withing fake terminals
+		//		 - Does not work with 'execFile'
+		//		 - Still, mednafen does not get the proper path? eventho the new cmd gets the path
+		//		 - In windows CMD it runs perfectly
+
+		CLIApp.quickExec('Start /D "$path_mednafen" $MEDNAFEN_EXE "${p}"', (s, out, err)->{
 				trace("-- MEDNAFEN EXIT --");
 				if (mountedPath != null) {
 					unmount(mountedPath);
 				}
 				if (onMednafenExit != null) onMednafenExit();
-			});
+		});
+
 	}//---------------------------------------------------;
 
 	/**
@@ -586,16 +588,6 @@ class Engine
 		trace(OPLOG);
 	}//---------------------------------------------------;
 
-
-	/** Prints some infos about current state */
-	public function info()
-	{
-		trace("-- ENGINE INFO ----- ");
-		trace("NUMBER OF GAMES", list_games.length);
-		if(index>=0) trace("CURRENT ACTIVE", list_games[index].name);
-		trace("LOCAL SAVES ::", saves_local);
-		trace("RAM SAVES ::", saves_ram);
-	}//---------------------------------------------------;
 
 	/**
 	   Checks the MD5 of two files
