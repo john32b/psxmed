@@ -1,12 +1,22 @@
+/********************************************************************
+ * PSX Launcher
+ * ------------
+ * Main TUI class
+ * Interacts with Engine
+ *
+ *******************************************************************/
 package;
+
 import djNode.BaseApp;
 import djNode.tools.LOG;
+import djTui.win.ControlsHelpBar;
+
+import djTui.adaptors.djNode.InputObj;
+import djTui.adaptors.djNode.TerminalObj;
 import djTui.BaseElement;
 import djTui.Styles;
 import djTui.WM;
 import djTui.Window;
-import djTui.adaptors.djNode.InputObj;
-import djTui.adaptors.djNode.TerminalObj;
 import djTui.el.Button;
 import djTui.el.Label;
 import djTui.el.VList;
@@ -14,13 +24,8 @@ import djTui.win.MenuBar;
 import djTui.win.MessageBox;
 import haxe.Timer;
 
+import djTui.WM.DB as DB;
 
-/**
- * PSX Launcher
- * ------------
- * Main TUI class
- * - Interacts with Engine
- */
 class Main extends BaseApp
 {
 	// Standard program entry
@@ -36,17 +41,14 @@ class Main extends BaseApp
 	var engine:Engine;
 
 	// Hold the windows
-	var winOptions:Window;
-	var winList:Window;
-	var winInfo:Window;
-	var winLog:Window;
+	var wBar:MenuBar;
+	var wList:Window;
+	var wOpt:Window;
+	var wLog:Window;
+	var wInfo:Window;
 
 	// Quick Pointers for the `Game Menu` RAMDRIVE buttons
-	var winOptBtns:Array<Button>;
-
-
-	var winNowPlaying:Window;
-
+	var btnStates:Array<Button>;
 	//====================================================;
 
 	// --
@@ -118,15 +120,15 @@ class Main extends BaseApp
 		}//------
 
 
-		if (engine.list_games.length == 0) {
+		if (engine.ar_games.length == 0) {
 			printBanner();
-			T.ptag(' - No games found in <yellow>"${engine.path_isos}"<!>\n');
+			T.ptag(' - No games found in <yellow>"${engine.cfg.path_iso}"<!>\n');
 			waitKeyQuit();
 			return;
 		}
 
 		// -- Get size from config or parameter. Parameter can override
-		parseSetSize(engine.terminal_size);
+		parseSetSize(engine.cfg.terminal_size);
 		if (argsOptions.size != null) {
 			if (argsOptions.size == "full") {
 				WIDTH = T.getWidth();
@@ -143,140 +145,150 @@ class Main extends BaseApp
 		WM.create( new InputObj(), new TerminalObj(), WIDTH, HEIGHT, "black.1", "blue.1");
 
 		// -- Main window Listing all games
-		winList = new Window("main", WIDTH - 25 - 4 - 4, HEIGHT - 7);
-			winList.pos(3, 3);
-			winList.addStack(new Label("Available Games").setColor("green"));
-			winList.addSeparator();
+		wList = new Window("wList", WIDTH - 33, HEIGHT - 7);
+			wList.pos(3, 3);
+			wList.addStack(new Label("Available Games").setColor("green"));
+			wList.addSeparator();
 			// --
-			var l = new VList(winList.inWidth, winList.inHeight - 2);
-				l.setData(engine.list_names);
-				l.onSelect = onGameSelect;
+			var l = new VList(wList.inWidth, wList.inHeight - 2);
 				l.flag_letter_jump = true;	// Pressing a letter will jump to it
-			winList.addStack(l);
-			winList.open(true);
-			winList.listen((m, el)->{
+				l.setData(engine.getGameNames());
+				l.onSelect = (l2)->{
+					l2.flag_ghost_active = true;
+					openGameOptions(l2.index);
+					l2.flag_ghost_active = false;
+				};
+
+			wList.addStack(l);
+			wList.open(true);
+			wList.listen((m, el)->{
 				if (m == "escape") { /* Escape Key */
 					WM.popupConfirm(()->Sys.exit(0), "QUIT");
 				}
 			});
 
-		// -
-		create_header_footer();
-		create_info();
-
-		// -- Game Options
-		winOptions = new Window("options", 20, 5, Styles.win.get("red.1"));
-			winOptions.posNext(winList, 2).move(0, 2);
-			winOptions.setPopupBehavior(); // Make it behave like a quick popup
-			winOptions.addStack(new Button("b1", "Launch"));
-			winOptions.addSeparator();
-
-			winOptBtns = [];
-			if (engine.flag_use_ramdrive)
-			{
-				winOptions.size(winOptions.width, winOptions.height + 5); // hacky way
-				winOptBtns.push(cast winOptions.addStack(new Button("b2", "Local --> RAM")));
-				winOptBtns.push(cast winOptions.addStack(new Button("b3", "RAM --> Local")));
-				winOptBtns.push(cast winOptions.addStack(new Button("b4", "Delete all RAM").extra("?Delete all Saves from RAM?")));
-				winOptBtns.push(cast winOptions.addStack(new Button("b5", "Delete all States").extra("?Delete States from RAM + LOCAL?")));
-				winOptions.addSeparator();
+		// -- Create the Game Options Window
+		wOpt = new Window("wOpt", 20, 5, Styles.win.get("red.1"));
+			wOpt.setPopupBehavior(); // Make it behave like a quick popup (close with esc, backspace, no tab exit)
+			wOpt.posNext(wList, 2).move(0, 2);
+			// --
+			wOpt.addStack(new Button("b1", "Launch"));
+			wOpt.addSeparator();
+			btnStates = [];	// Store all the state manipulation buttons
+			if (engine.flag_use_altsave) {
+				wOpt.size(wOpt.width, wOpt.height + 5); // hacky way
+				btnStates.push(cast wOpt.addStack(new Button("b2", "Primary --> Sec")));
+				btnStates.push(cast wOpt.addStack(new Button("b3", "Sec --> Primary")));
+				btnStates.push(cast wOpt.addStack(new Button("b4", "Delete all Sec").extra("?Delete all Saves from Secondary?")));
+				btnStates.push(cast wOpt.addStack(new Button("b5", "Delete all States").extra("?Delete States from Sec + Primary?")));
+				wOpt.addSeparator();
 			}
-
-			winOptions.addStack(new Button("", "Close").extra("close"));
-			winOptions.listen(onWindowEvent_Options);
+			wOpt.addStack(new Button("", "Close").extra("close"));
+			wOpt.listen(onWindowEvent_Options);
 
 		// -- Menu Bar
-		var w2 = new MenuBar(1, 3, {grid:true, bs:1});
-			w2.setItems(["FixCheats", "About", "Quit"]);
-			WM.A.screen(w2, "r", "t", 1);
-			w2.open();
-			w2.flag_lock_focus = false;
-			w2.onSelect = (ind)-> {
+		wBar = new MenuBar("wBar", 1, 3, {grid:true, bs:1});
+			wBar.tab_mode = 1;
+			wBar.setItems(["About", "Quit"]);
+			WM.A.screen(wBar, "r", "t", 1);	// Align after setting the items, so that it has a width
+			wBar.open();
+			wBar.onSelect = (ind)-> {
 				switch(ind){
 					case 0:
-						engine.fixCheats();
-						openLogStatus(engine.OPLOG);
+						wBar.openSub( // This will resume the focused item, also will open animated
+							MessageBox.create("Mednafen launcher\nCreated by JohnDimi, using Haxe", 0, null, 40),
+							true);
 					case 1:
-
-						w2.flag_return_focus_once = true;
-						MessageBox.create("Mednafen launcher\nCreated by JohnDimi, using Haxe", 3, null, 40, true);
-					case 2:
 						Sys.exit(0);
 					default:
 				}
 			}
 
 		//-- Quick popup text info, opens when a game launches
-		winLog = new Window(w2.width, 1);
-		winLog.flag_focusable = false;
-		winLog.padding(0, 0);
-		winLog.modStyle({ text:"yellow", borderStyle:0});
-		winLog.addStack(new Label("", winLog.inWidth, "center").setSID("log"));
-		WM.A.down(winLog, w2, 0, 1);
+		wLog = new Window("wLog", wBar.width, 1);
+			wLog.focusable = false;
+			wLog.modStyle({ text:"yellow", borderStyle:0});
+			wLog.addStack(new Label("", wLog.inWidth, "center").setSID("log"));
+			WM.A.down(wLog, wBar, 0, 1);
+
+		// -
+		wInfo = winCreate_GameInfo();
+		winCreate_HeaderFooter();
 
 		// -- Init some other things
 		engine.onMednafenExit = ()->{
-			if (winNowPlaying != null) { winNowPlaying.close(); winNowPlaying = null; }
-			winList.open(true);
+			var w = DB.get('nowplay');
+			if (w != null) {
+				DB.remove('nowplay'); w.close();
+			}
+			wBar.open();
+			DB["foot"].open();
+			wList.open(true);
 		};
+
+		WM.onWindowFocus = (w)->{
+
+		};
+
+		//-- Test footer --
+
 	}//---------------------------------------------------;
 
 
-	// --
-	// From the main window, a game was clicked
-	// - Open the game options window
-	function onGameSelect(i:Int)
+	// - Open the Game Options Popup for a target INDEX
+	// - It first checks the status of the buttons, then opens the window
+	function openGameOptions(i:Int)
 	{
 		engine.prepareGame(i);
 		// Only bother with checking if RAMDRIVE is enabled
-		if (engine.flag_use_ramdrive) {
-			winOptBtns[0].disabled = !engine.anySavesLOCAL();
-			winOptBtns[1].disabled = !engine.anySavesRAM();
-			winOptBtns[2].disabled = winOptBtns[1].disabled;
-			winOptBtns[3].disabled = winOptBtns[0].disabled && winOptBtns[1].disabled;
+		if (engine.flag_use_altsave) {
+			btnStates[0].disabled = !engine.anySavesLOCAL();
+			btnStates[1].disabled = !engine.anySavesRAM();
+			btnStates[2].disabled = btnStates[1].disabled;
+			btnStates[3].disabled = btnStates[0].disabled && btnStates[1].disabled;
 		}
-		winOptions.open(true);
+		DB.get('wOpt').open(true);
 	}//---------------------------------------------------;
 
 
 	// Window Events listener for the Game Options Window
 	function onWindowEvent_Options(a:String, b:BaseElement)
 	{
-		function opEnd()
-		{
+		function opEnd() {
 			// Repoen the same, to recheck button status
-			onGameSelect(engine.index);
-
+			openGameOptions(engine.index);
 			// Show the previous operation LOG
-			if (engine.OPLOG != null)
-			{
+			if (engine.OPLOG != null) {
 				openLogStatus(engine.OPLOG);
 			}
 		}
 
+		// ------
+
 		if (a == "close")
 		{
-			winInfo.close();
-			winList.focus();
-		}else
-		if (a == "open")
+			wInfo.close();
+			wList.focus();	// It will call this after the window is closed, but it's ok
+
+		} else if (a == "open")
 		{
 			openGameInfo();
-		}else
-		if (a == "fire") switch (b.SID)
+
+		}else if (a == "fire") switch (b.SID)
 		{
-			case "b1":
+			case "b1":	// Launch game
 
-				winOptions.close();
+				// Close all the windows
+				DB["foot"].close();
+				wOpt.close(); wList.close(); wBar.close();
 
-				if (!engine.launchGame())
-				{
+				if (!engine.launchGame()) {
 					openLogStatus(engine.ERROR);
 					return;
 				}
-
-				winList.close();
-				winNowPlaying = MessageBox.create("Now Playing:\n" + engine.gameName , 3, null, 40, Styles.win.get("gray.1"));
+				var mb = MessageBox.create("Now Playing:\n" + engine.current.name , -1, null, 40, Styles.win.get("gray.1"));
+				DB.set('nowplay', mb);
+				mb.open(true);
 
 			case "b2":
 				engine.copySave_LocalToRam();
@@ -304,36 +316,37 @@ class Main extends BaseApp
 	var inf_RAM:Button;
 	var inf_LOCAL:Button;
 	var inf_ZIP:Label;
-	function create_info()
+	function winCreate_GameInfo():Window
 	{
-		winInfo = new Window( -1, 2, Styles.win.get('black.1'));
-		winInfo.padding(2, 0);
-		winInfo.borderStyle = 0;
+		var w = new Window( -1, 2, Styles.win.get('black.1'));
+		w.padding(2, 0);
+		w.borderStyle = 0;
 
-			inf_name = new Label("", winInfo.inWidth - 13);
+			inf_name = new Label("", w.inWidth - 13);
 			inf_name.setColor("yellow");
 
-		winInfo.addStackInline([new Label("Game Name : "), inf_name]);
-		winInfo.flag_focusable = false;
-		WM.A.down(winInfo, winList);
+		w.addStackInline([new Label("Game Name : "), inf_name]);
+		w.focusable = false;
+		WM.A.down(w, wList);
 
 		inf_RAM = new Button("", "   ", 1);
 		inf_LOCAL = new Button("", "   ", 1);
 		inf_ZIP = cast new Label("").setColor("cyan");
 
-		winInfo.addStackInline([
-			new Label("Save on RAM"), inf_RAM,
-			new Label("Save Local"), inf_LOCAL, inf_ZIP]);
+		w.addStackInline([
+			new Label("Save Secondary"), inf_RAM,
+			new Label("Save Primary"), inf_LOCAL, inf_ZIP]);
+		return w;
 	}//---------------------------------------------------;
 
 	// - Sub Function
 	// Creates and adds a header/footer to the TUI
-	function create_header_footer()
+	function winCreate_HeaderFooter()
 	{
 		// -- Header Footer
 		// : Header
 		var head = new Window( -1, 1);
-			head.flag_focusable = false;
+			head.focusable = false;
 			// By default all windows use the default `WM.global_style_win`
 			head.modStyle({
 				bg:"darkcyan", text:"black", borderStyle:0, borderColor:{fg:"darkblue"}
@@ -341,15 +354,12 @@ class Main extends BaseApp
 			head.padding(2, 0);
 			head.addStack(new Label(PROGRAM_INFO.name + " v" + PROGRAM_INFO.version));
 
-		// : Footer
-		var foot = new Window( -1, 1);
-			foot.flag_focusable = false;
-			foot.padding(0);
-			foot.modStyle({
-				bg:"gray", text:"darkblue", borderStyle:0
-			});
-			foot.addStack(new Label("[TAB] = FOCUS | [↑↓] = MOVE | [ENTER] = SELECT | [ESC] = BACK", foot.inWidth, "center"));
-			foot.pos(0, WM.height - foot.height);
+
+		// : New footer
+		var foot = new ControlsHelpBar();
+			foot.setData('Nav:←↑→↓|Select:Enter|Focus:Tab|Back:Esc|Quit:^c');
+			foot.pos(0, HEIGHT - 1);
+			DB.set("foot", foot);	// Because I want to hide/unhide this
 
 		WM.add(head);
 		WM.add(foot);
@@ -361,15 +371,15 @@ class Main extends BaseApp
 	var winTimer:Timer;
 	function openLogStatus(s:String)
 	{
-		var l:Label = cast winLog.getElIndex(1);
+		var l:Label = cast wLog.getElIndex(1);
 			l.text = s;
-			winLog.open();
+			wLog.open();
 		if (winTimer != null) {
 			winTimer.stop();
 			winTimer = null;
 		}
 		winTimer = Timer.delay(function(){
-			winLog.close();
+			wLog.close();
 		}, STATUS_POPUP_TIME);
 	}//---------------------------------------------------;
 
@@ -407,7 +417,7 @@ class Main extends BaseApp
 			inf_ZIP.text = "";
 		}
 
-		winInfo.open();
+		wInfo.open();
 	}//---------------------------------------------------;
 
 
