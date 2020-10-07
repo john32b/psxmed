@@ -204,12 +204,14 @@ class Main extends BaseApp
 				}
 			}
 
-		//-- Quick popup text info, opens when a game launches
-		wLog = new Window("wLog", wBar.width, 1);
+		// Small text info
+		wLog = new Window("wLog", wList.width + 3, 1);
 			wLog.focusable = false;
 			wLog.modStyle({ text:"yellow", borderStyle:0});
 			wLog.addStack(new Label("", wLog.inWidth, "center").setSID("log"));
-			WM.A.down(wLog, wBar, 0, 1);
+			//WM.A.down(wLog, wBar);
+			WM.A.up(wLog, wList);
+			
 
 		// -
 		wInfo = winCreate_GameInfo();
@@ -411,7 +413,7 @@ class Main extends BaseApp
 			inf_LOCAL.colorIdle("red");
 		}
 
-		if (engine.isZIP){
+		if (engine.current.isZIP){
 			inf_ZIP.text = "(zipped)";
 		}else{
 			inf_ZIP.text = "";

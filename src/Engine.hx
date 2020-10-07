@@ -26,6 +26,8 @@ typedef GameEntry = {
 	var name:String;
 	var path:String;
 	var ext:String; // extension in lower case
+	var isZIP:Bool;	// is ZIP,PFO,CFS ( and needs to be mounted with pismo )
+					// note this is calculated at gamePrepare()
 }
 
 
@@ -46,13 +48,21 @@ class Engine
 	// Settings read from `config.ini`
 	public var cfg = {
 		path_iso : "",
-		path_mednafen : "",
-		path_savedir: "",
+		path_mednafen : "",		// full path
+		path_savedir: "",		// full path
 		path_autorun: "",
 		terminal_size: "",
 		pismo_enable:false,
-		autosave:false
+		autosave:false,
+		mednafen_states:"mcs", 	// is not the full path
+		mednafen_saves:"sav"	// is not the full path
+		
 	};
+	
+	// Final full path of Mednafen States and Saves
+	var path_med_states = "";
+	// Final full path of Mednafen States and Saves
+	var path_med_saves = "";
 
 	// This gets filled on config_load
 	public var flag_use_altsave(default, null):Bool = false;
@@ -76,10 +86,7 @@ class Engine
 	public var saves_local:Array<String>; 	// Fullpath of all LOCAL saves (states+MCR)
 	public var saves_ram:Array<String>;   	// Fullpath of all RAM saves   (states+MCR)
 
-	// Current selected game is ZIP/PFO ( needs to be mounted )
-	public var isZIP:Bool;
-
-	// If a game needs to be mounted (zip) this will hold the game fill path.
+	// If a game needs to be mounted (zip) this will hold the game full path.
 	// so that it can be unmounted later. It checks for null to figure out mounted game or not.
 	var mountedPath:String = null;
 
@@ -108,7 +115,7 @@ class Engine
 			trace(e.stack);
 			ERROR = "Generic filesystem Error";
 		}
-
+		
 		return (ERROR == null);
 	}//---------------------------------------------------;
 
@@ -127,14 +134,19 @@ class Engine
 
 		var S = ini.data.get('settings');
 		if (S == null) throw "Config File does not have a [settings] section";
-
-		cfg.terminal_size = S.get('size');
-		cfg.path_iso = Path.normalize ( S.get("isos") );
-		cfg.path_mednafen = Path.normalize( S.get("mednafen") );
-		cfg.path_savedir = Path.normalize( S.get("savedir") );
-		cfg.path_autorun = Path.normalize( S.get("autorun") );
+		
+		var gn = (p)->Path.normalize(S.get(p));
+		
+		cfg.path_iso = gn("isos");
+		cfg.path_mednafen = gn("mednafen");
+		cfg.path_savedir = gn("savedir");
+		cfg.path_autorun = gn("autorun");
+		cfg.mednafen_saves = gn("mednafen_saves");
+		cfg.mednafen_states = gn("mednafen_states");
+		cfg.terminal_size = S.get("size");
 		cfg.autosave = Std.parseInt(S.get("autosave") ) == 1;
 		cfg.pismo_enable = Std.parseInt(S.get("pismo_enable") ) == 1;
+		
 
 		// -- Check if settings are valid
 		if (cfg.path_iso.length < 2) throw 'ISOPATH not set';
@@ -143,6 +155,9 @@ class Engine
 		if (!FileTool.pathExists(cfg.path_mednafen)) throw 'MEDNAFEN PATH "${cfg.path_mednafen}" does not exist';
 		if (!FileTool.pathExists(Path.join(cfg.path_mednafen, MEDNAFEN_EXE))) throw 'Can\'t find "$MEDNAFEN_EXE" in "${cfg.path_mednafen}"';
 
+		path_med_saves = Path.resolve(cfg.path_mednafen, cfg.mednafen_saves);
+		path_med_states = Path.resolve(cfg.path_mednafen, cfg.mednafen_states);
+		
 		flag_use_altsave = cfg.path_savedir.length > 1;
 
 		if (flag_use_altsave)
@@ -152,6 +167,9 @@ class Engine
 		}
 
 		trace('Engine : Loaded Config.ini :' , cfg);
+		trace(' .mednafen states : ' + path_med_states);
+		trace(' .mednafen saves  : ' + path_med_saves);
+		trace(' ------------------- ');
 	}//---------------------------------------------------;
 
 
@@ -174,7 +192,8 @@ class Engine
 			var entry = {
 				name : Path.basename(i, Path.extname(i)),
 				path : i,
-				ext  : FileTool.getFileExt(i)
+				ext  : FileTool.getFileExt(i),
+				isZIP : false
 			};
 
 			ar_games.push(entry);
@@ -248,11 +267,12 @@ class Engine
 	{
 		index = i;
 		current = ar_games[index];
+		current.isZIP = ext_mountable.indexOf( current.ext ) >= 0;
 		saves_local = getLocalSaves(i);
 		saves_ram = getRamSaves(i);
-		isZIP = ext_mountable.indexOf( current.ext ) >= 0;
-		trace("Preparing Game: " + current.name);
-		if (isZIP) trace(" - Game will be mounted");
+		trace('Preparing Game: "${current.name}" | ZIP:"${current.isZIP}"');
+		trace("Saves Local", saves_local);
+		trace("Saves Ram", saves_ram);
 	}//---------------------------------------------------;
 
 	/**
@@ -260,14 +280,12 @@ class Engine
 	**/
 	public function launchGame():Bool
 	{
-		var g = ar_games[index];
+		trace('>> Launching game : ${current.name}');
 
-		trace('Launching game : ${g.name}');
-
-		if (isZIP)
+		if (current.isZIP)
 		{
 			// Mount the .zip then launch
-			mountedPath = PismoMount.mount(g.path);
+			mountedPath = PismoMount.mount(current.path);
 
 			// :: This should not happen ever, but check anyway
 			if (mountedPath == null)
@@ -308,7 +326,7 @@ class Engine
 		{
 			// Normal .cue/.m3u game, Launch normally
 			mountedPath = null;
-			startMednafen(g.path);
+			startMednafen(current.path);
 		}
 
 		return true;
@@ -362,10 +380,10 @@ class Engine
 			var dest:String;
 			if (FileTool.getFileExt(i) == ".mcr")
 			{
-				dest = Path.join(cfg.path_mednafen, 'sav', Path.basename(i));
+				dest = Path.join(path_med_saves, Path.basename(i));
 			}else
 			{
-				dest = Path.join(cfg.path_mednafen, 'mcs', Path.basename(i));
+				dest = Path.join(path_med_states, Path.basename(i));
 			}
 
 			// Check if file is the same, don't overwrite same files
@@ -411,7 +429,8 @@ class Engine
 		var join = saves_ram.concat(saves_local);
 		for (i in join)
 		{
-			if (~/(.*\d)$/i.match(i)) // Mach a single digit at the end of the string
+			// Mach a single digit at the end of the string (state file format)
+			if (~/(.*\d)$/i.match(i)) 
 			{
 				Fs.unlinkSync(i);
 				trace('Deleted - $i');
@@ -429,35 +448,36 @@ class Engine
 	{
 		var ar:Array<String> = [];
 		// Saves
-		for (c in 0...2)
-		{
-			var s = Path.join(cfg.path_mednafen , "sav" , ar_games[i].name + '.$c.mcr');
+		for (c in 0...2) {
+			var s = Path.join(path_med_saves , ar_games[i].name + '.$c.mcr');
 			if (FileTool.pathExists(s)) ar.push(s);
 		}
 		// States
-		for (c in 0...10)
-		{
-			var s = Path.join(cfg.path_mednafen , "mcs", ar_games[i].name + '.mc$c');
+		for (c in 0...10) {
+			var s = Path.join(path_med_states, ar_games[i].name + '.mc$c');
 			if (FileTool.pathExists(s)) ar.push(s);
 		}
 		return ar;
 	}//---------------------------------------------------;
 
-
+	
+	/**
+	   For the specified Game Index, get all the save files from the RAM DIR 
+	   and return them in an array
+	   @param	i
+	   @return
+	**/
 	function getRamSaves(i:Int):Array<String>
 	{
 		var ar:Array<String> = [];
 		if (!flag_use_altsave) return ar;
-
-		// Saves
-		for (c in 0...2)
-		{
+		// Saves. Memory Card (0-1)
+		for (c in 0...2) {
 			var s = Path.join(cfg.path_savedir, ar_games[i].name + '.$c.mcr');
 			if (FileTool.pathExists(s)) ar.push(s);
 		}
-		// States
-		for (c in 0...10)
-		{
+		// States (0-9)
+		for (c in 0...10) {
 			var s = Path.join(cfg.path_savedir , ar_games[i].name + '.mc$c');
 			if (FileTool.pathExists(s)) ar.push(s);
 		}
