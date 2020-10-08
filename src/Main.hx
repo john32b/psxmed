@@ -9,7 +9,9 @@ package;
 
 import djNode.BaseApp;
 import djNode.tools.LOG;
+import djTui.WindowState;
 import djTui.win.ControlsHelpBar;
+import djTui.win.WindowForm;
 
 import djTui.adaptors.djNode.InputObj;
 import djTui.adaptors.djNode.TerminalObj;
@@ -43,12 +45,13 @@ class Main extends BaseApp
 	// Hold the windows
 	var wBar:MenuBar;
 	var wList:Window;
-	var wOpt:Window;
+	var wGam:Window;
 	var wLog:Window;
 	var wInfo:Window;
+	var wTag:Window;
 
 	// Quick Pointers for the `Game Menu` RAMDRIVE buttons
-	var btnStates:Array<Button>;
+	var btnStates:Array<Button> = [];
 	//====================================================;
 
 	// --
@@ -138,13 +141,28 @@ class Main extends BaseApp
 			}
 		}//------
 
-		// -- Initialize TUI:
+		// -- Initialize TUI ------------------------------------------
 		T.setTitle(Engine.NAME);
 		T.resizeTerminal(WIDTH, HEIGHT);
 		T.pageDown(); T.clearScreen(); T.cursorHide();
 		WM.create( new InputObj(), new TerminalObj(), WIDTH, HEIGHT, "black.1", "blue.1");
 
-		// -- Main window Listing all games
+		// -- Launcher Options ------------------------------------------
+		var wOpt = new WindowForm('wOpt', -2, HEIGHT -7);
+			wOpt.flag_close_on_esc = true;
+			wOpt.focus_lock = true;
+			wOpt.setAlign("fixed", 2, 25);
+			wOpt.addStack(new Label("Launcher Options Games").setColor("yellow"));
+			wOpt.addSeparator();
+			wOpt.addQ("Fullscreen", 'toggle,fs,false');
+			wOpt.addQ("Shader", 'slOpt,shader,none|goat|sharp');
+			wOpt.addStackInline( [
+					new Button('ok', "Save", 1).colorFocus('black','green'),
+					new Button('cancel', "Cancel", 1)
+				], -1, 4, "c");	// -1 to put at the bottom of the window ,
+			WM.A.screen(wOpt);
+		
+		// -- Main window Listing all games ---------------------
 		wList = new Window("wList", WIDTH - 33, HEIGHT - 7);
 			wList.pos(3, 3);
 			wList.addStack(new Label("Available Games").setColor("green"));
@@ -154,69 +172,60 @@ class Main extends BaseApp
 				l.flag_letter_jump = true;	// Pressing a letter will jump to it
 				l.setData(engine.getGameNames());
 				l.onSelect = (l2)->{
+					// Dev: Hacky way to leave the highlighted element on
 					l2.flag_ghost_active = true;
-					openGameOptions(l2.index);
+					wGam_open(l2.index);
 					l2.flag_ghost_active = false;
 				};
-
 			wList.addStack(l);
-			wList.open(true);
 			wList.listen((m, el)->{
 				if (m == "escape") { /* Escape Key */
 					WM.popupConfirm(()->Sys.exit(0), "QUIT");
 				}
 			});
 
-		// -- Create the Game Options Window
-		wOpt = new Window("wOpt", 20, 5, Styles.win.get("red.1"));
-			wOpt.setPopupBehavior(); // Make it behave like a quick popup (close with esc, backspace, no tab exit)
-			wOpt.posNext(wList, 2).move(0, 2);
-			// --
-			wOpt.addStack(new Button("b1", "Launch"));
-			wOpt.addSeparator();
-			btnStates = [];	// Store all the state manipulation buttons
+		// -- Create the Game Options Window ---------------------
+		wGam = new Window("wGam", 20, 5, Styles.win.get("red.1"));
+			wGam.setPopupBehavior(); // Make it behave like a quick popup (close with esc, backspace, no tab exit)
+			wGam.posNext(wList, 2).move(0, 2);
+			wGam.addStack(new Button("launch", "Launch"));
+			wGam.addSeparator();
 			if (engine.flag_use_altsave) {
-				wOpt.size(wOpt.width, wOpt.height + 5); // hacky way
-				btnStates.push(cast wOpt.addStack(new Button("b2", "Primary --> Sec")));
-				btnStates.push(cast wOpt.addStack(new Button("b3", "Sec --> Primary")));
-				btnStates.push(cast wOpt.addStack(new Button("b4", "Delete all Sec").extra("?Delete all Saves from Secondary?")));
-				btnStates.push(cast wOpt.addStack(new Button("b5", "Delete all States").extra("?Delete States from Sec + Primary?")));
-				wOpt.addSeparator();
+				wGam.size(wGam.width, wGam.height + 3); // Resize the window
+				btnStates.push(cast wGam.addStack(new Button("pull", "Pull Save")));
+				btnStates.push(cast wGam.addStack(new Button("push", "Backup Save")));
+				wGam.addSeparator();
 			}
-			wOpt.addStack(new Button("", "Close").extra("close"));
-			wOpt.listen(onWindowEvent_Options);
+			wGam.addStack(new Button("", "Close").extra("close"));
+			wGam.listen(wGam_events);
+			
+			// Game EXT Tag ----------------------------------------------------
+			// Small text below the game options, indicating game extension. etc
+			
+			wTag = new Window("wTag", wGam.width, 1);
+				wTag.borderStyle = 0;
+				wTag.addStackInline([
+					new Label('Extension:'),
+					new Label().setColor('darkgray')]);
+				WM.A.down(wTag, wGam, 0, 1);
 
-		// -- Menu Bar
-		wBar = new MenuBar("wBar", 1, 3, {grid:true, bs:1});
-			wBar.tab_mode = 1;
-			wBar.setItems(["About", "Quit"]);
-			WM.A.screen(wBar, "r", "t", 1);	// Align after setting the items, so that it has a width
-			wBar.open();
-			wBar.onSelect = (ind)-> {
-				switch(ind){
-					case 0:
-						wBar.openSub( // This will resume the focused item, also will open animated
-							MessageBox.create("Mednafen launcher\nCreated by JohnDimi, using Haxe", 0, null, 40),
-							true);
-					case 1:
-						Sys.exit(0);
-					default:
-				}
-			}
-
-		// Small text info
-		wLog = new Window("wLog", wList.width + 3, 1);
+			
+		// Small text info ----------------------------------------------
+		// Flashing notification for actions (e.g. "Copied saves [OK]")
+		wLog = new Window("wLog", WIDTH - 6, 1);
 			wLog.focusable = false;
 			wLog.modStyle({ text:"yellow", borderStyle:0});
 			wLog.addStack(new Label("", wLog.inWidth, "center").setSID("log"));
-			//WM.A.down(wLog, wBar);
-			WM.A.up(wLog, wList);
+			wLog.pos(3, HEIGHT - 3);
 			
-
-		// -
-		wInfo = winCreate_GameInfo();
 		winCreate_HeaderFooter();
-
+		
+		// ---------------------------------------------------------------
+		
+		WM.STATE.create('main', [wList]);
+		WM.STATE.create('opt', [wOpt]);
+		WM.STATE.goto('main');
+		
 		// -- Init some other things
 		engine.onMednafenExit = ()->{
 			var w = DB.get('nowplay');
@@ -228,81 +237,62 @@ class Main extends BaseApp
 			wList.open(true);
 		};
 
-		WM.onWindowFocus = (w)->{
-
-		};
-
-		//-- Test footer --
-
 	}//---------------------------------------------------;
 
 
 	// - Open the Game Options Popup for a target INDEX
 	// - It first checks the status of the buttons, then opens the window
-	function openGameOptions(i:Int)
+	function wGam_open(i:Int)
 	{
 		engine.prepareGame(i);
 		// Only bother with checking if RAMDRIVE is enabled
 		if (engine.flag_use_altsave) {
 			btnStates[0].disabled = !engine.anySavesLOCAL();
 			btnStates[1].disabled = !engine.anySavesRAM();
-			btnStates[2].disabled = btnStates[1].disabled;
-			btnStates[3].disabled = btnStates[0].disabled && btnStates[1].disabled;
 		}
-		DB.get('wOpt').open(true);
+		DB.get('wGam').open(true);
 	}//---------------------------------------------------;
 
 
 	// Window Events listener for the Game Options Window
-	function onWindowEvent_Options(a:String, b:BaseElement)
+	function wGam_events(a:String, b:BaseElement)
 	{
-		function opEnd() {
-			// Repoen the same, to recheck button status
-			openGameOptions(engine.index);
+		var opEnd = ()->{
+			// Repoen the same, to refresh button status
+			wGam_open(engine.index);
 			// Show the previous operation LOG
-			if (engine.OPLOG != null) {
-				openLogStatus(engine.OPLOG);
-			}
-		}
-
-		// ------
+			logStatus(engine.OPLOG);
+		};// ------
 
 		if (a == "close")
 		{
-			wInfo.close();
-			wList.focus();	// It will call this after the window is closed, but it's ok
+			wList.focus();	// Sometimes it will call this after the window is closed, but it's ok
+			wTag.close();
 
 		} else if (a == "open")
 		{
-			openGameInfo();
-
+			wTag.open();
+			var l:Label = cast wTag.getElIndex(2);
+				l.text = '[' + engine.current.ext + ']';
+				
 		}else if (a == "fire") switch (b.SID)
 		{
-			case "b1":	// Launch game
-
+			case "launch":
 				// Close all the windows
 				DB["foot"].close();
-				wOpt.close(); wList.close(); wBar.close();
-
+				wGam.close(); wList.close(); wLog.close(); wTag.close();
 				if (!engine.launchGame()) {
-					openLogStatus(engine.ERROR);
+					logStatus(engine.ERROR);
 					return;
 				}
 				var mb = MessageBox.create("Now Playing:\n" + engine.current.name , -1, null, 40, Styles.win.get("gray.1"));
 				DB.set('nowplay', mb);
 				mb.open(true);
-
-			case "b2":
-				engine.copySave_LocalToRam();
+			case "pull":
+				engine.copySave_Pull();
 				opEnd();
-			case "b3":
-				engine.copySave_RamToLocal();
-				opEnd();
-			case "b4":
-				engine.deleteGameSaves_fromRam();
-				opEnd();
-			case "b5":
-				engine.deleteGameStates_fromEveryWhere();
+			case "push":
+				engine.copySave_Push();
 				opEnd();
 			default:
 
@@ -312,42 +302,33 @@ class Main extends BaseApp
 
 
 
-	// - Sub Function
-	// - Create and add info window (Small banner text on game information below main window)
-	var inf_name:Label;
-	var inf_RAM:Button;
-	var inf_LOCAL:Button;
-	var inf_ZIP:Label;
-	function winCreate_GameInfo():Window
-	{
-		var w = new Window( -1, 2, Styles.win.get('black.1'));
-		w.padding(2, 0);
-		w.borderStyle = 0;
-
-			inf_name = new Label("", w.inWidth - 13);
-			inf_name.setColor("yellow");
-
-		w.addStackInline([new Label("Game Name : "), inf_name]);
-		w.focusable = false;
-		WM.A.down(w, wList);
-
-		inf_RAM = new Button("", "   ", 1);
-		inf_LOCAL = new Button("", "   ", 1);
-		inf_ZIP = cast new Label("").setColor("cyan");
-
-		w.addStackInline([
-			new Label("Save Secondary"), inf_RAM,
-			new Label("Save Primary"), inf_LOCAL, inf_ZIP]);
-		return w;
-	}//---------------------------------------------------;
 
 	// - Sub Function
 	// Creates and adds a header/footer to the TUI
 	function winCreate_HeaderFooter()
 	{
-		// -- Header Footer
+		
+		// : Menu Bar 
+		wBar = new MenuBar("wBar", 1, 1, {bs:0, colbg:"darkcyan", colfg:"darkblue",bSmb:[1,0,0]});
+			wBar.tab_mode = 1;
+			wBar.setItems(["Options", "About", "Quit"]);
+			WM.A.screen(wBar, "r", "t", 0);	// Align after setting the items, so that it has a width
+			wBar.onSelect = (ind)-> {
+				switch (ind){
+					case 0:
+						/// TODO: GOTO OPTIONS -->
+					case 1:
+						wBar.openSub( // This will resume the focused item, also will open animated
+							MessageBox.create("Mednafen launcher\nCreated by JohnDimi, using Haxe", 0, null, 40),
+							true);
+					case 2:
+						Sys.exit(0);
+					default:
+				}
+			}
+			
 		// : Header
-		var head = new Window( -1, 1);
+		var head = new Window( WIDTH - wBar.width, 1);
 			head.focusable = false;
 			// By default all windows use the default `WM.global_style_win`
 			head.modStyle({
@@ -356,8 +337,7 @@ class Main extends BaseApp
 			head.padding(2, 0);
 			head.addStack(new Label(PROGRAM_INFO.name + " v" + PROGRAM_INFO.version));
 
-
-		// : New footer
+		// : Footer / Key help
 		var foot = new ControlsHelpBar();
 			foot.setData('Nav:←↑→↓|Select:Enter|Focus:Tab|Back:Esc|Quit:^c');
 			foot.pos(0, HEIGHT - 1);
@@ -365,61 +345,21 @@ class Main extends BaseApp
 
 		WM.add(head);
 		WM.add(foot);
+		WM.add(wBar);
 	}//---------------------------------------------------;
+	
+	
 	/**
 	   Show a quick status popup. General Purpose
 	   @param	s Message
 	**/
-	var winTimer:Timer;
-	function openLogStatus(s:String)
+	function logStatus(s:String)
 	{
+		if (s == null) return;
 		var l:Label = cast wLog.getElIndex(1);
 			l.text = s;
 			wLog.open();
-		if (winTimer != null) {
-			winTimer.stop();
-			winTimer = null;
-		}
-		winTimer = Timer.delay(function(){
-			wLog.close();
-		}, STATUS_POPUP_TIME);
-	}//---------------------------------------------------;
-
-
-	/** Open game info with current prepared games */
-	function openGameInfo()
-	{
-		inf_name.text = engine.current.name + "     ";
-
-		if (inf_name.text.length > inf_name.width)
-			inf_name.scroll(125);
-		else
-			inf_name.stop();
-
-		if (engine.saves_ram.length > 0){
-			inf_RAM.text = "YES";
-			inf_RAM.colorIdle("green");
-		}
-		else{
-			inf_RAM.text = "NO";
-			inf_RAM.colorIdle("red");
-		}
-		if (engine.saves_local.length > 0){
-			inf_LOCAL.text = "YES";
-			inf_LOCAL.colorIdle("green");
-		}
-		else{
-			inf_LOCAL.text = "NO";
-			inf_LOCAL.colorIdle("red");
-		}
-
-		if (engine.current.isZIP){
-			inf_ZIP.text = "(zipped)";
-		}else{
-			inf_ZIP.text = "";
-		}
-
-		wInfo.open();
+			l.blink(7, 180);
 	}//---------------------------------------------------;
 
 

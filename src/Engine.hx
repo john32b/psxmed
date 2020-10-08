@@ -30,7 +30,6 @@ typedef GameEntry = {
 					// note this is calculated at gamePrepare()
 }
 
-
 class Engine
 {
 	public static var NAME = "Mednafen PSX Custom Launcher";
@@ -80,7 +79,6 @@ class Engine
 	public var onMednafenExit:Void->Void;
 
 	// The engine first prepares a game, then launches it
-
 	public var current:GameEntry;			// Currently prepared game
 	public var index:Int = -1;				// Prepared game index
 	public var saves_local:Array<String>; 	// Fullpath of all LOCAL saves (states+MCR)
@@ -185,9 +183,11 @@ class Engine
 	{
 		ar_games = [];
 		var m3u:Array<String> = [];
-		var l = FileTool.getFileListFromDirR(cfg.path_iso, ext_normal.concat(ext_mountable));
+		var extToScan = ext_normal;
+		if (cfg.pismo_enable) extToScan = extToScan.concat(ext_mountable);
+		var fileList = FileTool.getFileListFromDirR(cfg.path_iso, extToScan);
 
-		for (i in l)
+		for (i in fileList)
 		{
 			var entry = {
 				name : Path.basename(i, Path.extname(i)),
@@ -195,11 +195,9 @@ class Engine
 				ext  : FileTool.getFileExt(i),
 				isZIP : false
 			};
-
 			ar_games.push(entry);
-
 			if (entry.ext == ".m3u") m3u.push(i);
-		}
+		}// --
 
 		// Open the M3U files and remove their entries from the main DB
 		//  - e.g.
@@ -295,33 +293,26 @@ class Engine
 			}
 
 			// - Figure out what kind of files are there in the archive
-			// - Prefer M3u files over .Cue files
+			// - Prefer .M3u files over .Cue files
 
 			var l:String = null; // File to launch
 			for (f in FileTool.getFileListFromDir(mountedPath))
 			{
-				var ext = FileTool.getFileExt(f);
-
-				if (ext == ".cue")
-				{
-					l = f;
-				} else
-
-				if (ext == ".m3u")
-				{
-					l = f; break; // Break because it should only have one .m3u file
+				switch (FileTool.getFileExt(f)) {
+					case ".cue" : l = f;
+					case ".m3u" : l = f; break;
+					default:
 				}
 			}
-
+			
 			if (l == null)
 			{
-				ERROR = "Archive Error.";
+				ERROR = "No '.cue|.m3u' files found";
 				PismoMount.unmount(mountedPath);
 				return false;
 			}
 
 			startMednafen(Path.join(mountedPath, l));
-
 		}else
 		{
 			// Normal .cue/.m3u game, Launch normally
@@ -338,7 +329,7 @@ class Engine
 	   Does not re-alter VARS, you need to prepare game again later
 	   @OPLOG
 	**/
-	public function copySave_LocalToRam()
+	public function copySave_Pull()
 	{
 		if (saves_local.length == 0) return; // Just in case
 
@@ -360,7 +351,7 @@ class Engine
 			}
 		}
 
-		OPLOG = 'Copied ($numCopied/$numTotal) saves to RAM';
+		OPLOG = 'Copied ($numCopied/$numTotal) saves to Custom Dir';
 	}//---------------------------------------------------;
 
 	/**
@@ -368,7 +359,7 @@ class Engine
 	   Does not re-alter VARS, you need to prepare game again later
 	   @OPLOG
 	**/
-	public function copySave_RamToLocal()
+	public function copySave_Push()
 	{
 		if (saves_ram.length == 0) return; // Just in case
 
@@ -400,45 +391,10 @@ class Engine
 			}
 
 		}
-		OPLOG = 'Copied ($numCopied/$numTotal) saves to LOCAL';
+		OPLOG = 'Copied ($numCopied/$numTotal) saves to Mednafen DB';
 	}//---------------------------------------------------;
 
-	/**
-		Delete a GAME'S saves from the ram
-	*/
-	public function deleteGameSaves_fromRam()
-	{
-		var c = 0;
-		for (i in saves_ram)
-		{
-			Fs.unlinkSync(i);
-			trace('Deleted - $i');
-			c++;
-		}
-		saves_ram = [];
-		OPLOG = 'Deleted ($c) saves from RAM';
-	}//---------------------------------------------------;
 
-	/**
-	   Delete all State Files (local and RAM)
-	   - Used when you are finished with a game and just want the .SAV file there
-	**/
-	public function deleteGameStates_fromEveryWhere()
-	{
-		var c = 0;
-		var join = saves_ram.concat(saves_local);
-		for (i in join)
-		{
-			// Mach a single digit at the end of the string (state file format)
-			if (~/(.*\d)$/i.match(i)) 
-			{
-				Fs.unlinkSync(i);
-				trace('Deleted - $i');
-				c++;
-			}
-		}
-		OPLOG = 'Deleted ($c) STATES from RAM & LOCAL';
-	}//---------------------------------------------------;
 
 
 	/** Get local saves, Empty Array for no saves
@@ -504,7 +460,7 @@ class Engine
 		//		 - In windows CMD it runs perfectly
 
 		CLIApp.quickExec('$MEDNAFEN_EXE "${p}"', cfg.path_mednafen, (s, out, err)->{
-				trace("-- MEDNAFEN EXIT --");
+				trace(">> MEDNAFEN EXIT");
 				if (mountedPath != null) {
 					PismoMount.unmount(mountedPath);
 				}
@@ -523,6 +479,44 @@ class Engine
 		for (i in ar_games) r.push(i.name);
 		return r;
 	}//---------------------------------------------------;
+
+	/**
+		Delete a GAME'S saves from the ram
+	**/
+	public function deleteGameSaves_fromRam()
+	{
+		var c = 0;
+		for (i in saves_ram)
+		{
+			Fs.unlinkSync(i);
+			trace('Deleted - $i');
+			c++;
+		}
+		saves_ram = [];
+		OPLOG = 'Deleted ($c) saves from RAM';
+	}//---------------------------------------------------;
+	
+	/**
+	   Delete all State Files (local and RAM)
+	   - Used when you are finished with a game and just want the .SAV file there
+	**/
+	public function deleteGameStates_fromEveryWhere()
+	{
+		var c = 0;
+		var join = saves_ram.concat(saves_local);
+		for (i in join)
+		{
+			// Mach a single digit at the end of the string (state file format)
+			if (~/(.*\d)$/i.match(i)) 
+			{
+				Fs.unlinkSync(i);
+				trace('Deleted - $i');
+				c++;
+			}
+		}
+		OPLOG = 'Deleted ($c) STATES from RAM & LOCAL';
+	}//---------------------------------------------------;
+	
 
 	static public function getConfigFullpath()
 	{
@@ -548,17 +542,15 @@ class Engine
 
 		return false;
 	}//---------------------------------------------------;
-
+	
 
 }// --
 
 
 
 
-
-
 /**
-  -- THIS IS NO LONGER NEEDED, FIXED IN RECENT VERSIONS --
+  -- THIS IS NO LONGER NEEDED, FIXED IN RECENT MEDNAFEN VERSIONS --
   ---------------------------------------------------------
 	Mednafen has a bug with the cheats file.
 	This copies the temp over the main file.
