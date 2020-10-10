@@ -10,9 +10,10 @@ package;
 import djNode.BaseApp;
 import djNode.tools.LOG;
 import djTui.WindowState;
+import djTui.el.SliderOption;
+import djTui.el.Toggle;
 import djTui.win.ControlsHelpBar;
 import djTui.win.WindowForm;
-
 import djTui.adaptors.djNode.InputObj;
 import djTui.adaptors.djNode.TerminalObj;
 import djTui.BaseElement;
@@ -146,21 +147,33 @@ class Main extends BaseApp
 		T.resizeTerminal(WIDTH, HEIGHT);
 		T.pageDown(); T.clearScreen(); T.cursorHide();
 		WM.create( new InputObj(), new TerminalObj(), WIDTH, HEIGHT, "black.1", "blue.1");
+		//WM.flag_debug_trace_events = true;
 
 		// -- Launcher Options ------------------------------------------
-		var wOpt = new WindowForm('wOpt', -2, HEIGHT -7);
+		var wOpt = new WindowForm('wOpt', 50, HEIGHT -7);
+			wOpt.flag_enter_goto_next = true;
 			wOpt.flag_close_on_esc = true;
 			wOpt.focus_lock = true;
 			wOpt.setAlign("fixed", 2, 25);
 			wOpt.addStack(new Label("Launcher Options Games").setColor("yellow"));
 			wOpt.addSeparator();
-			wOpt.addQ("Fullscreen", 'toggle,fs,false');
-			wOpt.addQ("Shader", 'slOpt,shader,none|goat|sharp');
+			var _getstr = (k)->{ // Build a slider option string
+				return 'slOpt,$k,' + engine.SETTING.get(k).split('-')[2];
+			}
+			// DEV: Default values for these elements will be set at every window open
+			wOpt.addQ("Fullscreen", 'toggle,fs');
+			wOpt.addQ("Blur", 'toggle,blur');
+			wOpt.addQ("Bilinear Filter", _getstr('bilinear'));
+			wOpt.addQ("Stretch", _getstr('stretch'));
+			wOpt.addQ("Shader",  _getstr('shader'));
+			wOpt.addQ("Special", _getstr('special'));
 			wOpt.addStackInline( [
 					new Button('ok', "Save", 1).colorFocus('black','green'),
 					new Button('cancel', "Cancel", 1)
 				], -1, 4, "c");	// -1 to put at the bottom of the window ,
+			wOpt.events.onAny = wOpt_events;
 			WM.A.screen(wOpt);
+
 		
 		// -- Main window Listing all games ---------------------
 		wList = new Window("wList", WIDTH - 33, HEIGHT - 7);
@@ -178,11 +191,9 @@ class Main extends BaseApp
 					l2.flag_ghost_active = false;
 				};
 			wList.addStack(l);
-			wList.listen((m, el)->{
-				if (m == "escape") { /* Escape Key */
-					WM.popupConfirm(()->Sys.exit(0), "QUIT");
-				}
-			});
+			wList.events.onOpen = ()->{
+				cast(DB.get('foot'), ControlsHelpBar).setData('Nav:↑↓←→|Select:Enter|Focus:Tab|Back:Esc|Quit:^c');
+			}
 
 		// -- Create the Game Options Window ---------------------
 		wGam = new Window("wGam", 20, 5, Styles.win.get("red.1"));
@@ -193,23 +204,28 @@ class Main extends BaseApp
 			if (engine.flag_use_altsave) {
 				wGam.size(wGam.width, wGam.height + 3); // Resize the window
 				btnStates.push(cast wGam.addStack(new Button("pull", "Pull Save")));
-				btnStates.push(cast wGam.addStack(new Button("push", "Backup Save")));
+				btnStates.push(cast wGam.addStack(new Button("push", "Push Save")));
 				wGam.addSeparator();
 			}
 			wGam.addStack(new Button("", "Close").extra("close"));
-			wGam.listen(wGam_events);
+			wGam.events.onAny = wGam_events;
 			
 			// Game EXT Tag ----------------------------------------------------
 			// Small text below the game options, indicating game extension. etc
 			
-			wTag = new Window("wTag", wGam.width, 1);
+			wTag = new Window("wTag", wGam.width, 3);
 				wTag.borderStyle = 0;
 				wTag.addStackInline([
 					new Label('Extension:'),
 					new Label().setColor('darkgray')]);
+				wTag.addStackInline([
+					new Label('Mednafen Saves:'),
+					new Label().setColor('darkmagenta')]);
+				wTag.addStackInline([
+					new Label('Ready Saves:'),
+					new Label().setColor('darkmagenta')]);
 				WM.A.down(wTag, wGam, 0, 1);
 
-			
 		// Small text info ----------------------------------------------
 		// Flashing notification for actions (e.g. "Copied saves [OK]")
 		wLog = new Window("wLog", WIDTH - 6, 1);
@@ -218,6 +234,7 @@ class Main extends BaseApp
 			wLog.addStack(new Label("", wLog.inWidth, "center").setSID("log"));
 			wLog.pos(3, HEIGHT - 3);
 			
+		
 		winCreate_HeaderFooter();
 		
 		// ---------------------------------------------------------------
@@ -272,8 +289,9 @@ class Main extends BaseApp
 		} else if (a == "open")
 		{
 			wTag.open();
-			var l:Label = cast wTag.getElIndex(2);
-				l.text = '[' + engine.current.ext + ']';
+			cast(wTag.getElIndex(2), Label).text = '[' + engine.current.ext + ']';
+			cast(wTag.getElIndex(4), Label).text = '(' + engine.saves_local.length + ')';
+			cast(wTag.getElIndex(6), Label).text = '(' + engine.saves_ram.length + ')';
 				
 		}else if (a == "fire") switch (b.SID)
 		{
@@ -298,11 +316,60 @@ class Main extends BaseApp
 
 		}
 	}//---------------------------------------------------;
+	
+	
+	function wOpt_events(a:String, b:BaseElement)
+	{
+		// CallList
+		if (a == "close" && b.type == window)
+		{
+			 WM.STATE.goto('main');
+		}else
+		if (a == "open" && b.type == window)
+		{
+			// Help bar update
+			cast(DB.get('foot'), ControlsHelpBar).setData('Nav:↑↓|Select:Enter|Change:←→|Focus:Tab|Back:Esc|Quit:^c');
+			
+			var w = DB['wOpt'];
+			
+			for (v in engine.SETTING.keys())
+			{
+				if (w.getEl(v).type == toggle)
+					w.getEl(v).setData(engine.getSettingVal(v)=="1");
+				else
+					w.getEl(v).setData(engine.getSettingVal(v));
+			}
+		}else
+		if (a == "fire") switch (b.SID)
+		{
+			case "ok":
+				var w = DB['wOpt'];
+				for (v in engine.SETTING.keys()) {
+					var el = w.getEl(v);
+					var data = "";
+					if (el.type == option) {
+						data = cast(el, SliderOption).getSelected();
+					}else
+					if (el.type == toggle) {
+						data = cast(el, Toggle).getData()?"1":"0";
+					}
+					engine.setSetting(v, data);
+				}
+				if (engine.saveSettings()){
+					logStatus('Settings Saved [OK]');
+				}else{
+					logStatus('Could not write settings to file');
+				}
+				w.close();
+			case "cancel": 
+				DB['wOpt'].close();
+			default:
+		}
+		
+	}//---------------------------------------------------;
 
 
-
-
-
+	
 	// - Sub Function
 	// Creates and adds a header/footer to the TUI
 	function winCreate_HeaderFooter()
@@ -315,14 +382,11 @@ class Main extends BaseApp
 			WM.A.screen(wBar, "r", "t", 0);	// Align after setting the items, so that it has a width
 			wBar.onSelect = (ind)-> {
 				switch (ind){
-					case 0:
-						/// TODO: GOTO OPTIONS -->
-					case 1:
-						wBar.openSub( // This will resume the focused item, also will open animated
-							MessageBox.create("Mednafen launcher\nCreated by JohnDimi, using Haxe", 0, null, 40),
+					case 0: WM.STATE.goto('opt');
+					case 1: wBar.openSub( // This will resume the focused item, also will open animated
+							MessageBox.create("Mednafen launcher\nby John Dimi 2020", 0, null, 40),
 							true);
-					case 2:
-						Sys.exit(0);
+					case 2: Sys.exit(0);
 					default:
 				}
 			}
@@ -330,8 +394,7 @@ class Main extends BaseApp
 		// : Header
 		var head = new Window( WIDTH - wBar.width, 1);
 			head.focusable = false;
-			// By default all windows use the default `WM.global_style_win`
-			head.modStyle({
+			head.modStyle({ // By default all windows use the default `WM.global_style_win`
 				bg:"darkcyan", text:"black", borderStyle:0, borderColor:{fg:"darkblue"}
 			});
 			head.padding(2, 0);
@@ -339,9 +402,8 @@ class Main extends BaseApp
 
 		// : Footer / Key help
 		var foot = new ControlsHelpBar();
-			foot.setData('Nav:←↑→↓|Select:Enter|Focus:Tab|Back:Esc|Quit:^c');
 			foot.pos(0, HEIGHT - 1);
-			DB.set("foot", foot);	// Because I want to hide/unhide this
+			DB.set("foot", foot);
 
 		WM.add(head);
 		WM.add(foot);
@@ -353,13 +415,16 @@ class Main extends BaseApp
 	   Show a quick status popup. General Purpose
 	   @param	s Message
 	**/
+	var logTimer:Timer;
 	function logStatus(s:String)
 	{
-		if (s == null) return;
 		var l:Label = cast wLog.getElIndex(1);
 			l.text = s;
 			wLog.open();
-			l.blink(7, 180);
+			l.blink(5, 180);
+		logTimer = Timer.delay(()->{
+			wLog.close();
+		}, 3500);
 	}//---------------------------------------------------;
 
 

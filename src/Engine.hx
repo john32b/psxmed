@@ -1,6 +1,12 @@
 /********************************************************************
  * PSX Launcher Main Engine
- *
+ * ------------------------
+ * 
+ * TODO:
+ *	- Some bits of code are named RAM, this is the old naming convention where
+ *    the custom save dir was a "ramdisk" but now it can be anything. 
+ *    so rename the "RAM" to something else, like "CUSTOM_SAVE_DIR"
+ * 
  *******************************************************************/
 
 package;
@@ -43,8 +49,21 @@ class Engine
 	static var file_config_empty = "config_empty.ini";
 	static var MEDNAFEN_EXE = "mednafen.exe";
 	static var PSX_CFG = "psx.cfg";
+	
+	
+	// User Settings 
+	// Key => "psx config field" - "default value" - "Option1|Option2|...|OptionN"
+	public var SETTING:Map<String,String> = [
+		"bilinear" => 'psx.videoip-1-0|1|x|y',
+		"stretch" => 'psx.stretch-aspect_mult2-0|full|aspect|aspect_int|aspect_mult2',
+		"shader" => 'psx.shader-none-none|autoip|autoipsharper|scale2x|sabr|ipsharper|ipxnoty|ipynotx|ipxnotysharper|ipynotxsharper|goat',
+		"special" => 'psx.special-none-none|hq2x|hq3x|hq4x|scale2x|scale3x|scale4x|2xsai|super2xsai|supereagle|nn2x|nn3x|nn4x|nny2x|nny3x|nny4x',
+		"fs" => 'video.fs-1',	// toggle state default
+		"blur" => 'psx.tblur-0'	// toggle state default
+	];
+	
 
-	// Settings read from `config.ini`
+	// Program Config read from `config.ini`
 	public var cfg = {
 		path_iso : "",
 		path_mednafen : "",		// full path
@@ -55,7 +74,6 @@ class Engine
 		autosave:false,
 		mednafen_states:"mcs", 	// is not the full path
 		mednafen_saves:"sav"	// is not the full path
-		
 	};
 	
 	// Final full path of Mednafen States and Saves
@@ -87,6 +105,9 @@ class Engine
 	// If a game needs to be mounted (zip) this will hold the game full path.
 	// so that it can be unmounted later. It checks for null to figure out mounted game or not.
 	var mountedPath:String = null;
+	
+	// Object representation of 'psx.cfg' I can write values and call save()
+	var psxcfg:ConfigFileA;
 
 	//---------------------------------------------------;
 
@@ -106,6 +127,7 @@ class Engine
 			_load_parse_config();
 			_scan_iso_dir();
 			_check_autorun();
+			_get_psxcfg();
 		}catch (e:String) {
 			ERROR = e;
 		}
@@ -255,10 +277,54 @@ class Engine
 		}
 	}//---------------------------------------------------;
 
+	
+	// - load 'psx.cfg' and set it up
+	function _get_psxcfg()
+	{
+		psxcfg = new ConfigFileA(Path.join(cfg.path_mednafen, PSX_CFG));
+		
+		if (!psxcfg.load()) {
+			// But it is going to be created at save(), so no big deal
+			trace("Note: 'psx.cfg' does not exist");
+		}
+		
+		// Does the CFG needs saving? Did I write any values to it?
+		var S = false;
+		
+		// Quick function to check for a field, and set it if not what it expects
+		var ensure = (f,k)->{
+			if (psxcfg.get(f) != k){
+				psxcfg.set(f, k);
+				S = true;
+			}
+		}// --
+		
+		ensure('filesys.fname_state', "%f.%X");
+		ensure('filesys.fname_sav', "%F.%x");
+		
+		if (flag_use_altsave) 
+		{
+			ensure('filesys.path_state', cfg.path_savedir);
+			ensure('filesys.path_sav', cfg.path_savedir);
+		}
+		
+		// -------
+		if (S){
+			trace("> Wrote some default values, saving `psx.cfg");
+			if (!psxcfg.save()) {
+				throw "Cannot write to 'psx.cfg', do you have write access?";
+			}
+		}else{
+			trace("> No need to modify `psx.cfg`");
+		}
+		
+	}//---------------------------------------------------;
+	
 
 	/**
 	   Request a game index to be prepared to be launched
 	   Called when you select a game from the list and the options are displayed
+	   - Reads save status
 	   @param	i
 	**/
 	public function prepareGame(i:Int)
@@ -351,7 +417,7 @@ class Engine
 			}
 		}
 
-		OPLOG = 'Copied ($numCopied/$numTotal) saves to Custom Dir';
+		OPLOG = 'Copied ($numCopied/$numTotal) saves to current Save dir';
 	}//---------------------------------------------------;
 
 	/**
@@ -393,7 +459,6 @@ class Engine
 		}
 		OPLOG = 'Copied ($numCopied/$numTotal) saves to Mednafen DB';
 	}//---------------------------------------------------;
-
 
 
 
@@ -479,7 +544,36 @@ class Engine
 		for (i in ar_games) r.push(i.name);
 		return r;
 	}//---------------------------------------------------;
-
+	
+	
+	// For a setting ID, get the PSX.CFG value or the default (defined in SETTINGS map)
+	public function getSettingVal(id:String):String
+	{
+		var value = "";	// < return value
+		var fields = SETTING.get(id).split('-');
+		var data:String = psxcfg.get(fields[0]);
+		if (data == null) {
+			value = fields[1];
+		}else{
+			value = data;
+		}
+		return value;
+	}//---------------------------------------------------;
+	
+	// id : "special","stretch" etc. The keys in SETTING
+	// val : String value as it is to be written to psx.cfg
+	public function setSetting(id:String, val:String)
+	{
+		var fields = SETTING.get(id).split('-');
+		psxcfg.set(fields[0], val);
+	}//---------------------------------------------------;
+	
+	// After calling setSetting, call this to actually save to the file
+	public function saveSettings():Bool
+	{
+		return psxcfg.save();
+	}//---------------------------------------------------;
+	
 	/**
 		Delete a GAME'S saves from the ram
 	**/
