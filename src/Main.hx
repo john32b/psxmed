@@ -38,8 +38,8 @@ class Main extends BaseApp
 	static var WIDTH = 80;
 	static var HEIGHT = 25;
 	static var WIDTH_MIN = 60;
-	static var HEIGHT_MIN = 20;
-	static var STATUS_POPUP_TIME:Int = 3000;
+	static var HEIGHT_MIN = 22;
+	static var STATUS_POPUP_TIME:Int = 3300;
 
 	// Instance for the app engine
 	var engine:Engine;
@@ -49,7 +49,6 @@ class Main extends BaseApp
 	var wList:Window;
 	var wGam:Window;
 	var wLog:Window;
-	var wInfo:Window;
 	var wTag:Window;
 
 	// Quick Pointers for the `Game Menu` RAMDRIVE buttons
@@ -151,7 +150,7 @@ class Main extends BaseApp
 		//WM.flag_debug_trace_events = true;
 
 		// -- Launcher Options ------------------------------------------
-		var wOpt = new WindowForm('wOpt', 50, HEIGHT -7);
+		var wOpt = new WindowForm('wOpt', 50, 20);
 			wOpt.flag_enter_goto_next = true;
 			wOpt.flag_close_on_esc = true;
 			wOpt.focus_lock = true;
@@ -252,19 +251,25 @@ class Main extends BaseApp
 		WM.STATE.goto('main');
 		
 		// -- Init some other things
-		engine.onMednafenExit = ()->{
-			var w = DB.get('nowplay');
-			if (w != null) {
-				DB.remove('nowplay'); w.close();
-			}
-			wBar.open();
-			DB["foot"].open();
-			wList.open(true);
-		};
-
+		engine.onMednafenExit = onMednafenExit;
+		
 	}//---------------------------------------------------;
 
+	// Autocalled when a game exits, or a game cannot start
+	function onMednafenExit()
+	{
+		var w = DB.get('nowplay');
+		if (w != null) {
+			DB.remove('nowplay'); w.close();
+		}
+		wBar.open();
+		DB["foot"].open();
+		wList.open(true);
+	}//---------------------------------------------------;
 
+	
+	
+	
 	// - Open the Game Options Popup for a target INDEX
 	// - It first checks the status of the buttons, then opens the window
 	function wGam_open(i:Int)
@@ -309,6 +314,7 @@ class Main extends BaseApp
 				wGam.close(); wList.close(); wLog.close(); wTag.close();
 				if (!engine.launchGame()) {
 					logStatus(engine.ERROR);
+					onMednafenExit();
 					return;
 				}
 				var mb = MessageBox.create("Now Playing:\n" + engine.current.name , -1, null, 40, Styles.win.get("gray.1"));
@@ -435,9 +441,10 @@ class Main extends BaseApp
 			l.text = s;
 			wLog.open();
 			l.blink(5, 180);
+		if (logTimer != null){logTimer.stop(); logTimer = null; }	
 		logTimer = Timer.delay(()->{
 			wLog.close();
-		}, 3500);
+		}, STATUS_POPUP_TIME);
 	}//---------------------------------------------------;
 
 

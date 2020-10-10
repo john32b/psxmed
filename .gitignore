@@ -1,5 +1,6 @@
 /dev 
-/bin/*.js
-/bin/*.js.map
-thumbs.db
+/archive
+/bin/app*
+/bin/config.ini
 /src/Test*
+thumbs.db

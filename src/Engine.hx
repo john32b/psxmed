@@ -39,7 +39,7 @@ typedef GameEntry = {
 class Engine
 {
 	public static var NAME = "Mednafen PSX Custom Launcher";
-	public static var VER = "0.5"; //DEV
+	public static var VER = "0.5";
 
 	// Compatible ISO DIR extensions
 	static var ext_normal = [".cue", ".m3u"];
@@ -660,7 +660,6 @@ class Engine
 	
 
 }// --
-
 
 
 
