@@ -10,6 +10,7 @@ package;
 import djNode.BaseApp;
 import djNode.tools.LOG;
 import djTui.WindowState;
+import djTui.el.SliderNum;
 import djTui.el.SliderOption;
 import djTui.el.Toggle;
 import djTui.win.ControlsHelpBar;
@@ -167,9 +168,16 @@ class Main extends BaseApp
 			wOpt.addQ("Stretch", _getstr('stretch'));
 			wOpt.addQ("Shader",  _getstr('shader'));
 			wOpt.addQ("Special", _getstr('special'));
+			wOpt.addSeparator();
+			wOpt.addStack(new Label('Valid when (stretch=0) :').setColor('yellow'));
+			wOpt.addQ('Widen', 'slNum,widen,0,1,0.1,0');
+			wOpt.addQ('Window Scale', 'slNum,wsc,1,5,0.25,2');
+			wOpt.addQ('FullScreen Scale', 'slNum,fsc,1,5,0.25,2');
+			
+			
 			wOpt.addStackInline( [
-					new Button('ok', "Save", 1).colorFocus('black','green'),
-					new Button('cancel', "Cancel", 1)
+					new Button('cancel', "Cancel", 1),
+					new Button('ok', "Save", 1).colorFocus('black','green')
 				], -1, 4, "c");	// -1 to put at the bottom of the window ,
 			wOpt.events.onAny = wOpt_events;
 			WM.A.screen(wOpt);
@@ -335,9 +343,9 @@ class Main extends BaseApp
 			for (v in engine.SETTING.keys())
 			{
 				if (w.getEl(v).type == toggle)
-					w.getEl(v).setData(engine.getSettingVal(v)=="1");
+					w.getEl(v).setData(engine.setting_get(v) == "1");
 				else
-					w.getEl(v).setData(engine.getSettingVal(v));
+					w.getEl(v).setData(engine.setting_get(v));
 			}
 		}else
 		if (a == "fire") switch (b.SID)
@@ -352,10 +360,15 @@ class Main extends BaseApp
 					}else
 					if (el.type == toggle) {
 						data = cast(el, Toggle).getData()?"1":"0";
+					}else
+					if (el.type == number){
+						data = "" + cast(el, SliderNum).getData();
 					}
-					engine.setSetting(v, data);
+					engine.setting_set(v, data);
 				}
-				if (engine.saveSettings()){
+				// Extra settings
+				engine.setting_process();
+				if (engine.settings_save()){
 					logStatus('Settings Saved [OK]');
 				}else{
 					logStatus('Could not write settings to file');

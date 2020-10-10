@@ -59,7 +59,11 @@ class Engine
 		"shader" => 'psx.shader-none-none|autoip|autoipsharper|scale2x|sabr|ipsharper|ipxnoty|ipynotx|ipxnotysharper|ipynotxsharper|goat',
 		"special" => 'psx.special-none-none|hq2x|hq3x|hq4x|scale2x|scale3x|scale4x|2xsai|super2xsai|supereagle|nn2x|nn3x|nn4x|nny2x|nny3x|nny4x',
 		"fs" => 'video.fs-1',	// toggle state default
-		"blur" => 'psx.tblur-0'	// toggle state default
+		"blur" => 'psx.tblur-0',// toggle state default
+		
+		"widen" => 'psx.sc_widen-0',
+		"wsc" => 'psx.sc_win-3',
+		"fsc" => 'psx.sc_fs-2'
 	];
 	
 
@@ -547,7 +551,7 @@ class Engine
 	
 	
 	// For a setting ID, get the PSX.CFG value or the default (defined in SETTINGS map)
-	public function getSettingVal(id:String):String
+	public function setting_get(id:String):String
 	{
 		var value = "";	// < return value
 		var fields = SETTING.get(id).split('-');
@@ -562,16 +566,33 @@ class Engine
 	
 	// id : "special","stretch" etc. The keys in SETTING
 	// val : String value as it is to be written to psx.cfg
-	public function setSetting(id:String, val:String)
+	public function setting_set(id:String, val:String)
 	{
 		var fields = SETTING.get(id).split('-');
 		psxcfg.set(fields[0], val);
 	}//---------------------------------------------------;
 	
-	// After calling setSetting, call this to actually save to the file
-	public function saveSettings():Bool
+	// After calling setting_set, call this to actually save to the file
+	public function settings_save():Bool
 	{
 		return psxcfg.save();
+	}//---------------------------------------------------;
+	
+	/**
+	   Process the extra settings that are calculated from other fields (scaling)
+	   DEV: Always called after the defaults have been loaded into 'psx.cfg'
+	**/
+	public function setting_process()
+	{
+		var sc_widen:Float = Std.parseFloat(psxcfg.data.psx.sc_widen);
+		var sc_win:Float = Std.parseFloat(psxcfg.data.psx.sc_win);
+		var sc_fs:Float = Std.parseFloat(psxcfg.data.psx.sc_fs);
+		// Max ratio is 1.5 times the original width
+		var ratio = 1 + 0.5 * sc_widen;
+		psxcfg.set('psx.xscale', "" + (sc_win * ratio));
+		psxcfg.set('psx.yscale', "" + sc_win);
+		psxcfg.set('psx.xscalefs', "" + (sc_fs * ratio));
+		psxcfg.set('psx.yscalefs', "" + sc_fs);
 	}//---------------------------------------------------;
 	
 	/**
