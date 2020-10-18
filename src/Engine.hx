@@ -103,7 +103,7 @@ class Engine
 	// The engine first prepares a game, then launches it
 	public var current:GameEntry;			// Currently prepared game
 	public var index:Int = -1;				// Prepared game index
-	public var saves_local:Array<String>; 	// Fullpath of all LOCAL saves (states+MCR)
+	public var saves_med:Array<String>; 	// Fullpath of all MEDNAFEN saves (states+MCR)
 	public var saves_ram:Array<String>;   	// Fullpath of all RAM saves   (states+MCR)
 
 	// If a game needs to be mounted (zip) this will hold the game full path.
@@ -336,10 +336,10 @@ class Engine
 		index = i;
 		current = ar_games[index];
 		current.isZIP = ext_mountable.indexOf( current.ext ) >= 0;
-		saves_local = getLocalSaves(i);
+		saves_med = getLocalSaves(i);
 		saves_ram = getRamSaves(i);
 		trace('Preparing Game: "${current.name}" | ZIP:"${current.isZIP}"');
-		trace("Saves Local", saves_local);
+		trace("Saves Local", saves_med);
 		trace("Saves Ram", saves_ram);
 	}//---------------------------------------------------;
 
@@ -397,16 +397,16 @@ class Engine
 	/**
 	   Save Exists locally and ramdrive Exists
 	   Does not re-alter VARS, you need to prepare game again later
-	   @OPLOG
+	   - Writes OPLOG
 	**/
 	public function copySave_Pull()
 	{
-		if (saves_local.length == 0) return; // Just in case
+		if (saves_med.length == 0) return; // Just in case
 
 		var numCopied:Int = 0;
-		var numTotal:Int = saves_local.length;
+		var numTotal:Int = saves_med.length;
 
-		for (i in saves_local)
+		for (i in saves_med)
 		{
 			var newsave = Path.join(cfg.path_savedir, Path.basename(i));
 			// Don't copy over
@@ -427,7 +427,7 @@ class Engine
 	/**
 	   Copy RAM to LOCAL and overwrite everything
 	   Does not re-alter VARS, you need to prepare game again later
-	   @OPLOG
+	   - Writes OPLOG
 	**/
 	public function copySave_Push()
 	{
@@ -540,7 +540,7 @@ class Engine
 
 	public function anySavesRAM():Bool { return saves_ram.length > 0; }
 
-	public function anySavesLOCAL():Bool { return saves_local.length > 0;}
+	public function anySavesLOCAL():Bool { return saves_med.length > 0;}
 
 	public function getGameNames():Array<String>
 	{
@@ -564,6 +564,7 @@ class Engine
 		return value;
 	}//---------------------------------------------------;
 	
+	// Set Dat in "psx.cfg", don't forget to settings_save()
 	// id : "special","stretch" etc. The keys in SETTING
 	// val : String value as it is to be written to psx.cfg
 	public function setting_set(id:String, val:String)
@@ -596,6 +597,55 @@ class Engine
 	}//---------------------------------------------------;
 	
 	/**
+	   type:
+		states_sec : delete states from SECONDARY
+		states_med : delete states from Mednafen
+		all		   : delete saves + states from everywhere
+	**/
+	public function deleteSave(type:String)
+	{
+		trace("--Deleting save ", type);
+		OPLOG = null;
+		var del:Array<String>;
+		switch (type){
+			case "states_sec":
+				trace(">> Deleting states SEC : ");
+				del = saveArExtractStates(saves_ram);	// alters saves_ram
+			case "states_med":
+				trace(">> Deleting states MED : ");
+				del = saveArExtractStates(saves_med);	// alters saves_med
+			case "all":
+				trace(">> Deleting All Saves : ");
+				del = saves_ram.concat(saves_med);
+				saves_ram = [];
+				saves_med = [];
+			default: return;
+		}
+		
+		var c = 0;
+		for (i in del) {
+			Fs.unlinkSync(i);
+			trace('Deleted - $i');
+			c++;
+		}
+		OPLOG = 'Deleted ($c) saves';
+	}//---------------------------------------------------;
+	
+	// - Remove the states from an Array, and Return new array
+	function saveArExtractStates(ar:Array<String>):Array<String>
+	{
+		var states:Array<String> = [];
+		var c = ar.length;
+		while (--c >= 0) {
+			if (~/(.*\d)$/i.match(ar[c])) {
+				states.push(ar[c]);
+				ar.splice(c, 1);
+			}
+		}
+		return states;
+	}//---------------------------------------------------;
+	
+	/**
 		Delete a GAME'S saves from the ram
 	**/
 	public function deleteGameSaves_fromRam()
@@ -618,7 +668,7 @@ class Engine
 	public function deleteGameStates_fromEveryWhere()
 	{
 		var c = 0;
-		var join = saves_ram.concat(saves_local);
+		var join = saves_ram.concat(saves_med);
 		for (i in join)
 		{
 			// Mach a single digit at the end of the string (state file format)

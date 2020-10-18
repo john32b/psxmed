@@ -27,6 +27,8 @@ import djTui.el.VList;
 import djTui.win.MenuBar;
 import djTui.win.MessageBox;
 import haxe.Timer;
+import haxe.macro.Expr.Case;
+import haxe.xml.Check;
 
 import djTui.WM.DB as DB;
 
@@ -147,7 +149,6 @@ class Main extends BaseApp
 		T.resizeTerminal(WIDTH, HEIGHT);
 		T.pageDown(); T.clearScreen(); T.cursorHide();
 		WM.create( new InputObj(), new TerminalObj(), WIDTH, HEIGHT, "black.1", "blue.1");
-		//WM.flag_debug_trace_events = true;
 
 		// -- Launcher Options ------------------------------------------
 		var wOpt = new WindowForm('wOpt', 50, 20);
@@ -209,9 +210,10 @@ class Main extends BaseApp
 			wGam.addStack(new Button("launch", "Launch"));
 			wGam.addSeparator();
 			if (engine.flag_use_altsave) {
-				wGam.size(wGam.width, wGam.height + 3); // Resize the window
-				btnStates.push(cast wGam.addStack(new Button("pull", "Pull Save")));
-				btnStates.push(cast wGam.addStack(new Button("push", "Push Save")));
+				wGam.size(wGam.width, wGam.height + 4); // Resize the window
+				btnStates.push(cast wGam.addStack(new Button("pull", "Pull Saves")));
+				btnStates.push(cast wGam.addStack(new Button("push", "Push Saves")));
+				btnStates.push(cast wGam.addStack(new Button("del>", "Delete >")));
 				wGam.addSeparator();
 			}
 			wGam.addStack(new Button("", "Close").extra("close"));
@@ -241,9 +243,7 @@ class Main extends BaseApp
 			wLog.addStack(new Label("", wLog.inWidth, "center").setSID("log"));
 			wLog.pos(3, HEIGHT - 3);
 			
-		
 		winCreate_HeaderFooter();
-		
 		// ---------------------------------------------------------------
 		
 		WM.STATE.create('main', [wList]);
@@ -268,32 +268,54 @@ class Main extends BaseApp
 	}//---------------------------------------------------;
 
 	
-	
+	// -- Open/Create a new window openDelete
+	function wGam_openDel()
+	{
+		var w = new Window(null, wGam.width, wGam.height, wGam.style);
+		w.pos(wGam.x, wGam.y);
+		w.focus_lock = true;
+		w.setPopupBehavior();
+		w.addStack(new Label("DELETE :").setColor("red", "black"));
+		w.addSeparator();
+		w.addStack(new Button("0","States in CUSTOM").confirm("Del States in CUSTOM"));
+		w.addStack(new Button("1","States in MED").confirm("Del States in MED"));
+		w.addStack(new Button("2","Everything").confirm("Delete all Saves"));
+		w.addSeparator();
+		w.addStack(new Button("back", "Back"));
+		w.open(true);
+		w.events.onClose = wGam.focus;
+		w.events.onElem = (a, b)->{
+			if (a != "fire") return; 
+			switch (b.SID){
+				case "0": engine.deleteSave('states_sec'); wGam_open(engine.index, true);
+				case "1": engine.deleteSave('states_med'); wGam_open(engine.index, true);
+				case "2": engine.deleteSave('all'); wGam_open(engine.index, true);
+				default:
+			}
+			w.close();
+		}
+		
+	}//---------------------------------------------------;
 	
 	// - Open the Game Options Popup for a target INDEX
 	// - It first checks the status of the buttons, then opens the window
-	function wGam_open(i:Int)
+	function wGam_open(i:Int, log:Bool = false)
 	{
 		engine.prepareGame(i);
-		// Only bother with checking if RAMDRIVE is enabled
 		if (engine.flag_use_altsave) {
 			btnStates[0].disabled = !engine.anySavesLOCAL();
 			btnStates[1].disabled = !engine.anySavesRAM();
+			btnStates[2].disabled = btnStates[0].disabled && btnStates[1].disabled;
 		}
 		DB.get('wGam').open(true);
+		if (log && engine.OPLOG != null)
+			logStatus(engine.OPLOG); // Show the previous operation LOG
 	}//---------------------------------------------------;
 
 
 	// Window Events listener for the Game Options Window
 	function wGam_events(a:String, b:BaseElement)
 	{
-		var opEnd = ()->{
-			// Repoen the same, to refresh button status
-			wGam_open(engine.index);
-			// Show the previous operation LOG
-			logStatus(engine.OPLOG);
-		};// ------
-
 		if (a == "close")
 		{
 			wList.focus();	// Sometimes it will call this after the window is closed, but it's ok
@@ -303,7 +325,7 @@ class Main extends BaseApp
 		{
 			wTag.open();
 			cast(wTag.getElIndex(2), Label).text = '[' + engine.current.ext + ']';
-			cast(wTag.getElIndex(4), Label).text = '(' + engine.saves_local.length + ')';
+			cast(wTag.getElIndex(4), Label).text = '(' + engine.saves_med.length + ')';
 			cast(wTag.getElIndex(6), Label).text = '(' + engine.saves_ram.length + ')';
 				
 		}else if (a == "fire") switch (b.SID)
@@ -322,10 +344,13 @@ class Main extends BaseApp
 				mb.open(true);
 			case "pull":
 				engine.copySave_Pull();
-				opEnd();
+				wGam_open(engine.index, true);
 			case "push":
 				engine.copySave_Push();
-				opEnd();
+				wGam_open(engine.index, true);
+			case "del>":
+				wGam_openDel(); // Present a popup with delete options
+								// This will handle logic as well
 			default:
 
 		}
@@ -446,6 +471,7 @@ class Main extends BaseApp
 			wLog.close();
 		}, STATUS_POPUP_TIME);
 	}//---------------------------------------------------;
+	
 
 
 	// Set the Width/Height from a string like "80,20"

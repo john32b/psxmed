@@ -1,6 +1,6 @@
 /dev 
 /archive
-/bin/app*
 /bin/config.ini
+/bin/app*
 /src/Test*
 thumbs.db
