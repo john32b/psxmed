@@ -39,7 +39,7 @@ typedef GameEntry = {
 class Engine
 {
 	public static var NAME = "Mednafen PSX Custom Launcher";
-	public static var VER = "0.5";
+	public static var VER = "0.5.1";
 
 	// Compatible ISO DIR extensions
 	static var ext_normal = [".cue", ".m3u"];
@@ -103,8 +103,12 @@ class Engine
 	// The engine first prepares a game, then launches it
 	public var current:GameEntry;			// Currently prepared game
 	public var index:Int = -1;				// Prepared game index
+	
 	public var saves_med:Array<String>; 	// Fullpath of all MEDNAFEN saves (states+MCR)
-	public var saves_ram:Array<String>;   	// Fullpath of all RAM saves   (states+MCR)
+	public var saves_ram:Array<String>;   	// Fullpath of all RAM saves (states+MCR)
+	
+	public var saves_med_states:Array<String>;	// Fullpaths of MEDNAFEN - STATES ONLY
+	public var saves_ram_states:Array<String>;	// Fullpaths of RAM - STATES ONLY
 
 	// If a game needs to be mounted (zip) this will hold the game full path.
 	// so that it can be unmounted later. It checks for null to figure out mounted game or not.
@@ -336,8 +340,8 @@ class Engine
 		index = i;
 		current = ar_games[index];
 		current.isZIP = ext_mountable.indexOf( current.ext ) >= 0;
-		saves_med = getLocalSaves(i);
-		saves_ram = getRamSaves(i);
+		getLocalSaves(i);
+		getRamSaves(i);
 		trace('Preparing Game: "${current.name}" | ZIP:"${current.isZIP}"');
 		trace("Saves Local", saves_med);
 		trace("Saves Ram", saves_ram);
@@ -466,23 +470,26 @@ class Engine
 
 
 
-	/** Get local saves, Empty Array for no saves
-	 * Returns both sav + states
+	/** 
+	 * - Prepares local saves into variables
 	 **/
-	function getLocalSaves(i:Int):Array<String>
+	function getLocalSaves(i:Int)
 	{
-		var ar:Array<String> = [];
+		saves_med = [];
+		saves_med_states = [];
 		// Saves
 		for (c in 0...2) {
 			var s = Path.join(path_med_saves , ar_games[i].name + '.$c.mcr');
-			if (FileTool.pathExists(s)) ar.push(s);
+			if (FileTool.pathExists(s)) saves_med.push(s);
 		}
 		// States
 		for (c in 0...10) {
 			var s = Path.join(path_med_states, ar_games[i].name + '.mc$c');
-			if (FileTool.pathExists(s)) ar.push(s);
+			if (FileTool.pathExists(s)) {
+				saves_med.push(s);
+				saves_med_states.push(s);
+			}
 		}
-		return ar;
 	}//---------------------------------------------------;
 
 	
@@ -492,21 +499,24 @@ class Engine
 	   @param	i
 	   @return
 	**/
-	function getRamSaves(i:Int):Array<String>
+	function getRamSaves(i:Int)
 	{
-		var ar:Array<String> = [];
-		if (!flag_use_altsave) return ar;
+		saves_ram = [];
+		saves_ram_states = [];
+		if (!flag_use_altsave) return;
 		// Saves. Memory Card (0-1)
 		for (c in 0...2) {
 			var s = Path.join(cfg.path_savedir, ar_games[i].name + '.$c.mcr');
-			if (FileTool.pathExists(s)) ar.push(s);
+			if (FileTool.pathExists(s)) saves_ram.push(s);
 		}
 		// States (0-9)
 		for (c in 0...10) {
 			var s = Path.join(cfg.path_savedir , ar_games[i].name + '.mc$c');
-			if (FileTool.pathExists(s)) ar.push(s);
+			if (FileTool.pathExists(s)) {
+				saves_ram.push(s);
+				saves_ram_states.push(s);
+			}
 		}
-		return ar;
 	}//---------------------------------------------------;
 
 	/**
@@ -601,24 +611,22 @@ class Engine
 		states_sec : delete states from SECONDARY
 		states_med : delete states from Mednafen
 		all		   : delete saves + states from everywhere
+		- At every operation the game needs to be PREPARED to read the new saves again
 	**/
 	public function deleteSave(type:String)
 	{
-		trace("--Deleting save ", type);
 		OPLOG = null;
 		var del:Array<String>;
 		switch (type){
 			case "states_sec":
 				trace(">> Deleting states SEC : ");
-				del = saveArExtractStates(saves_ram);	// alters saves_ram
+				del = saves_ram_states;
 			case "states_med":
 				trace(">> Deleting states MED : ");
-				del = saveArExtractStates(saves_med);	// alters saves_med
+				del = saves_med_states;
 			case "all":
 				trace(">> Deleting All Saves : ");
 				del = saves_ram.concat(saves_med);
-				saves_ram = [];
-				saves_med = [];
 			default: return;
 		}
 		
@@ -629,60 +637,26 @@ class Engine
 			c++;
 		}
 		OPLOG = 'Deleted ($c) saves';
+		
+		// DEV: I am not altering the arrays,because I expect the game to be prepared again after this
 	}//---------------------------------------------------;
 	
-	// - Remove the states from an Array, and Return new array
-	function saveArExtractStates(ar:Array<String>):Array<String>
+	// From an array of path saves, get the STATES only
+	// IF remove==true, will remove them from the original array
+	public function saveArGetStates(ar:Array<String>, remove:Bool = false ):Array<String>
 	{
 		var states:Array<String> = [];
 		var c = ar.length;
 		while (--c >= 0) {
 			if (~/(.*\d)$/i.match(ar[c])) {
 				states.push(ar[c]);
-				ar.splice(c, 1);
+				if (remove) ar.splice(c, 1);
 			}
 		}
 		return states;
 	}//---------------------------------------------------;
 	
-	/**
-		Delete a GAME'S saves from the ram
-	**/
-	public function deleteGameSaves_fromRam()
-	{
-		var c = 0;
-		for (i in saves_ram)
-		{
-			Fs.unlinkSync(i);
-			trace('Deleted - $i');
-			c++;
-		}
-		saves_ram = [];
-		OPLOG = 'Deleted ($c) saves from RAM';
-	}//---------------------------------------------------;
 	
-	/**
-	   Delete all State Files (local and RAM)
-	   - Used when you are finished with a game and just want the .SAV file there
-	**/
-	public function deleteGameStates_fromEveryWhere()
-	{
-		var c = 0;
-		var join = saves_ram.concat(saves_med);
-		for (i in join)
-		{
-			// Mach a single digit at the end of the string (state file format)
-			if (~/(.*\d)$/i.match(i)) 
-			{
-				Fs.unlinkSync(i);
-				trace('Deleted - $i');
-				c++;
-			}
-		}
-		OPLOG = 'Deleted ($c) STATES from RAM & LOCAL';
-	}//---------------------------------------------------;
-	
-
 	static public function getConfigFullpath()
 	{
 		return BaseApp.app.getAppPathJoin(Engine.file_config);

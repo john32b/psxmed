@@ -222,18 +222,19 @@ class Main extends BaseApp
 			// Game EXT Tag ----------------------------------------------------
 			// Small text below the game options, indicating game extension. etc
 			
-			wTag = new Window("wTag", wGam.width, 3);
+			wTag = new Window("wTag", wGam.width + 2, 4);
 				wTag.borderStyle = 0;
 				wTag.addStackInline([
 					new Label('Extension:'),
 					new Label().setColor('darkgray')]);
 				wTag.addStackInline([
-					new Label('Mednafen Saves:'),
-					new Label().setColor('darkmagenta')]);
-				wTag.addStackInline([
 					new Label('Ready Saves:'),
-					new Label().setColor('darkmagenta')]);
-				WM.A.down(wTag, wGam, 0, 1);
+					new Label().setColor('yellow')]);
+				wTag.addStackInline([
+					new Label('Mednafen Saves:'),
+					new Label().setColor('cyan')]);
+				wTag.addStack(new Label('(Saves Total : States)').setColor('darkgray'));
+				if (engine.flag_use_altsave) WM.A.down(wTag, wGam, 0, 1);
 
 		// Small text info ----------------------------------------------
 		// Flashing notification for actions (e.g. "Copied saves [OK]")
@@ -282,19 +283,25 @@ class Main extends BaseApp
 		w.addStack(new Button("2","Everything").confirm("Delete all Saves"));
 		w.addSeparator();
 		w.addStack(new Button("back", "Back"));
-		w.open(true);
 		w.events.onClose = wGam.focus;
 		w.events.onElem = (a, b)->{
 			if (a != "fire") return; 
+			var l = true;
 			switch (b.SID){
-				case "0": engine.deleteSave('states_sec'); wGam_open(engine.index, true);
-				case "1": engine.deleteSave('states_med'); wGam_open(engine.index, true);
-				case "2": engine.deleteSave('all'); wGam_open(engine.index, true);
-				default:
+				case "0": engine.deleteSave('states_sec');
+				case "1": engine.deleteSave('states_med');
+				case "2": engine.deleteSave('all');
+				default: l = false;
 			}
 			w.close();
+			if (l) wGam_open(engine.index, true);
 		}
-		
+		// Refresh buttons
+		//cast(w.getEl("0"), Button).disabled = (engine.saveArGetStates(engine.saves_ram).length == 0);
+		//cast(w.getEl("1"), Button).disabled = (engine.saveArGetStates(engine.saves_med).length == 0);	
+		cast(w.getEl("0"), Button).disabled = engine.saves_ram_states.length == 0;
+		cast(w.getEl("1"), Button).disabled = engine.saves_med_states.length == 0;
+		w.open(true);
 	}//---------------------------------------------------;
 	
 	// - Open the Game Options Popup for a target INDEX
@@ -323,10 +330,12 @@ class Main extends BaseApp
 
 		} else if (a == "open")
 		{
+			if (engine.flag_use_altsave) {
 			wTag.open();
 			cast(wTag.getElIndex(2), Label).text = '[' + engine.current.ext + ']';
-			cast(wTag.getElIndex(4), Label).text = '(' + engine.saves_med.length + ')';
-			cast(wTag.getElIndex(6), Label).text = '(' + engine.saves_ram.length + ')';
+			cast(wTag.getElIndex(4), Label).text = '(' + engine.saves_ram.length + ':' + engine.saves_ram_states.length +  ')';
+			cast(wTag.getElIndex(6), Label).text = '(' + engine.saves_med.length + ':' + engine.saves_med_states.length +  ')';
+			}
 				
 		}else if (a == "fire") switch (b.SID)
 		{

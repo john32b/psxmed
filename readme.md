@@ -1,12 +1,12 @@
 # PSX Launcher for Mednafen
 
-**PSXMED version** : 0.5 (*2020-10*), **License** : MIT   
+**PSXMED version** : 0.5.1 (*2020-10*), **License** : MIT   
 **Author** : John Dimi  
 
 This is a very simple CLI **PS1** game **launcher** for **Mednafen** that comes with some **practical features.**
 
 - Deep scan a directory and present valid CD game files on a list
-- Option to operate on an **alternative save folder** for all saves/savestates. Then copy these files over to the mednafen save folder from within the interface.
+- Option to operate on an **alternative save folder** for all saves/savestates. Then copy these files over to the Mednafen  save folder from within the interface.
 - Option to **automatically mount** `.ZIP` archives using the **Pismo File Mount** program and then run those games automatically
 - Exposes some Mednafen graphic options, so you don't have to *tweak* the `.cfg` files manually
 
@@ -28,7 +28,7 @@ You can install this with **NPM** , and be able to launch this from anywhere. *T
 
 ### Running
 - Just call **`psxmed`** from anywhere.  
-  **I recommend** calling it from a Windows RUN dialog, so that it opens in a new window (*`WIN + R` -> psxmed*) 
+  **I recommend** calling it from a Windows RUN dialog, so that it opens in a new window (*`WIN + R` -> `psxmed`*) 
 - **At first run** you must  setup the config file.  
   To quickly open `config.ini` you can run `psxmed cfg` and the file will be opened with the default editor. Else when you run `psxmed` it will inform you that it needs to be configured along with the full path of the config file. 
 - Supported **File Extensions** are `.cue` and `.m3u`. If you have `pismo file mount` installed and enabled, it also supports `.pfo` `.cfs` and `.zip`
