@@ -28,7 +28,7 @@
   </build>
   <!-- haxelib libraries -->
   <haxelib>
-    <library name="djNode" />
+    <library name="djNode:0.6.0" />
     <library name="djTui" />
   </haxelib>
   <!-- Class files to compile (other referenced classes will automatically be included) -->

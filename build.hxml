@@ -4,7 +4,7 @@
 
 -cmd Echo Building PSXMED Release
 
--lib djNode
+-lib djNode:0.6.0
 -lib djTui
 -cp src/
 -main Main

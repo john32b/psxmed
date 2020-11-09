@@ -11,14 +11,15 @@
 
 package;
 
+import haxe.crypto.Md5;
+import djA.MathT;
 import djA.cfg.ConfigFileA;
+import djA.cfg.ConfigFileB;
 import djNode.BaseApp;
 import djNode.app.PismoMount;
 import djNode.tools.FileTool;
 import djNode.utils.CLIApp;
 import djNode.utils.ProcUtil;
-import haxe.crypto.Md5;
-import djA.cfg.ConfigFileB;
 import js.Node;
 import js.lib.Error;
 import js.node.ChildProcess;
@@ -36,10 +37,11 @@ typedef GameEntry = {
 					// note this is calculated at gamePrepare()
 }
 
+
 class Engine
 {
-	public static var NAME = "Mednafen PSX Custom Launcher";
-	public static var VER = "0.5.1";
+	public static var NAME = "PSX Mednafen Launcher (psxmed)";
+	public static var VER = "0.5.2";
 
 	// Compatible ISO DIR extensions
 	static var ext_normal = [".cue", ".m3u"];
@@ -51,8 +53,9 @@ class Engine
 	static var PSX_CFG = "psx.cfg";
 	
 	
-	// User Settings 
+	// User Settings
 	// Key => "psx config field" - "default value" - "Option1|Option2|...|OptionN"
+	// ! IMPORTANT !, the key name should be the same as the Form Element ID Name.
 	public var SETTING:Map<String,String> = [
 		"bilinear" => 'psx.videoip-1-0|1|x|y',
 		"stretch" => 'psx.stretch-aspect_mult2-0|full|aspect|aspect_int|aspect_mult2',
@@ -60,10 +63,10 @@ class Engine
 		"special" => 'psx.special-none-none|hq2x|hq3x|hq4x|scale2x|scale3x|scale4x|2xsai|super2xsai|supereagle|nn2x|nn3x|nn4x|nny2x|nny3x|nny4x',
 		"fs" => 'video.fs-1',	// toggle state default
 		"blur" => 'psx.tblur-0',// toggle state default
-		
-		"widen" => 'psx.sc_widen-0',
-		"wsc" => 'psx.sc_win-3',
-		"fsc" => 'psx.sc_fs-2'
+		// :: These are custom vars ::
+		"widen" => 'psx.c_widen-0',
+		"win_ht" => 'psx.c_win_height-840',
+		"fs_ht" => 'psx.c_fs_height-860'
 	];
 	
 
@@ -123,9 +126,8 @@ class Engine
 	public function new(){}
 
 	/**
-	   Initialize
-	   - Throws errors (read engine.error)
-	   @return
+	   Initialize Things
+	   Throws errors (read engine.error)
 	**/
 	public function init():Bool
 	{
@@ -374,7 +376,7 @@ class Engine
 			{
 				switch (FileTool.getFileExt(f)) {
 					case ".cue" : l = f;
-					case ".m3u" : l = f; break;
+					case ".m3u" : l = f; break; // Force Load the M3U, stop looking for anything else
 					default:
 				}
 			}
@@ -400,8 +402,9 @@ class Engine
 
 	/**
 	   Save Exists locally and ramdrive Exists
-	   Does not re-alter VARS, you need to prepare game again later
+	   Does not re-alter VARS, you need to prepare game again later (for save status to refresh)
 	   - Writes OPLOG
+	   - Does not copy over files
 	**/
 	public function copySave_Pull()
 	{
@@ -591,19 +594,26 @@ class Engine
 	
 	/**
 	   Process the extra settings that are calculated from other fields (scaling)
-	   DEV: Always called after the defaults have been loaded into 'psx.cfg'
+	   - Called from the options menu (OK) before final saving the psx.cfg
+	   - This is to calculate the correct xscales from the user inputed custom sizes
 	**/
 	public function setting_process()
 	{
-		var sc_widen:Float = Std.parseFloat(psxcfg.data.psx.sc_widen);
-		var sc_win:Float = Std.parseFloat(psxcfg.data.psx.sc_win);
-		var sc_fs:Float = Std.parseFloat(psxcfg.data.psx.sc_fs);
-		// Max ratio is 1.5 times the original width
-		var ratio = 1 + 0.5 * sc_widen;
-		psxcfg.set('psx.xscale', "" + (sc_win * ratio));
-		psxcfg.set('psx.yscale', "" + sc_win);
-		psxcfg.set('psx.xscalefs', "" + (sc_fs * ratio));
-		psxcfg.set('psx.yscalefs', "" + sc_fs);
+		var sc_widen:Float = Std.parseFloat(psxcfg.data.psx.c_widen);
+		var win_ht:Float = Std.parseFloat(psxcfg.data.psx.c_win_height);
+		var fs_ht:Float = Std.parseFloat(psxcfg.data.psx.c_fs_height);
+		
+		// DEV: I want to calculate the xscale,yscale values mednafen uses
+		//      based on a predefined height. 
+		//		x1 scale for mednafen is (320x240) so I am working from that
+		//		The default ratio is 1.3 for 4/3. And I want to apply a bit of stretch
+		//		0 widen is 1.3. full widen is 1.7 about 16/9 ratio
+		var wide_ratio = 1.3 + (0.4 * sc_widen); // Max ratio is 1.7
+		
+		psxcfg.set('psx.yscale', "" + MathT.roundFloat(win_ht / 240, 2));
+		psxcfg.set('psx.xscale', "" + MathT.roundFloat((win_ht * wide_ratio) / 320, 2));
+		psxcfg.set('psx.yscalefs', "" + MathT.roundFloat(fs_ht / 240, 2));
+		psxcfg.set('psx.xscalefs', "" + MathT.roundFloat((fs_ht * wide_ratio) / 320, 2));
 	}//---------------------------------------------------;
 	
 	/**

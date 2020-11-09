@@ -1,10 +1,13 @@
 /********************************************************************
- * PSX Launcher
- * ------------
- * Main TUI class
- * Interacts with Engine
+ * PSX MED
+ * Unorthodox Mednafen PS1 Games Launcher
+ * ---------------------------------------=
+ * 
+ * - Main TUI class
+ * - Interacts with Engine
  *
  *******************************************************************/
+
 package;
 
 import djNode.BaseApp;
@@ -12,6 +15,7 @@ import djNode.tools.LOG;
 import djTui.WindowState;
 import djTui.el.SliderNum;
 import djTui.el.SliderOption;
+import djTui.el.TextInput;
 import djTui.el.Toggle;
 import djTui.win.ControlsHelpBar;
 import djTui.win.WindowForm;
@@ -27,8 +31,6 @@ import djTui.el.VList;
 import djTui.win.MenuBar;
 import djTui.win.MessageBox;
 import haxe.Timer;
-import haxe.macro.Expr.Case;
-import haxe.xml.Check;
 
 import djTui.WM.DB as DB;
 
@@ -169,11 +171,11 @@ class Main extends BaseApp
 			wOpt.addQ("Shader",  _getstr('shader'));
 			wOpt.addQ("Special", _getstr('special'));
 			wOpt.addSeparator();
-			wOpt.addStack(new Label('Valid when (stretch=0) :').setColor('yellow'));
-			wOpt.addQ('Widen', 'slNum,widen,0,1,0.1,0');
-			wOpt.addQ('Window Scale', 'slNum,wsc,1,5,0.25,2');
-			wOpt.addQ('FullScreen Scale', 'slNum,fsc,1,5,0.25,2');
 			
+			wOpt.addStack(new Label('Valid when (stretch=0) : ').setColor('yellow'));
+			wOpt.addQ('Wide Ratio', 'slNum,widen,0,1,0.1,0');
+			wOpt.addQ('FullScreen Height', 'input,fs_ht,4,number');
+			wOpt.addQ('Window Height', 'input,win_ht,4,number');
 			
 			wOpt.addStackInline( [
 					new Button('cancel', "Cancel", 1),
@@ -373,41 +375,41 @@ class Main extends BaseApp
 		{
 			 WM.STATE.goto('main');
 		}else
+		
+		// -- Read data from the ConfigFile object, and apply to elements:
 		if (a == "open" && b.type == window)
 		{
 			// Help bar update
 			cast(DB.get('foot'), ControlsHelpBar).setData('Nav:↑↓|Select:Enter|Change:←→|Focus:Tab|Back:Esc|Quit:^c');
-			
 			var w = DB['wOpt'];
-			
-			for (v in engine.SETTING.keys())
-			{
+			for (v in engine.SETTING.keys()) {
 				if (w.getEl(v).type == toggle)
 					w.getEl(v).setData(engine.setting_get(v) == "1");
 				else
 					w.getEl(v).setData(engine.setting_get(v));
 			}
 		}else
+		
+		// -- Store all the elements data back to the ConfigFile Object 
+		//    and save that object back to the file
 		if (a == "fire") switch (b.SID)
 		{
 			case "ok":
 				var w = DB['wOpt'];
 				for (v in engine.SETTING.keys()) {
 					var el = w.getEl(v);
-					var data = "";
-					if (el.type == option) {
-						data = cast(el, SliderOption).getSelected();
-					}else
-					if (el.type == toggle) {
-						data = cast(el, Toggle).getData()?"1":"0";
-					}else
-					if (el.type == number){
-						data = "" + cast(el, SliderNum).getData();
+					var data:String = switch (el.type) {
+						case option : cast(el, SliderOption).getSelected();
+						case toggle : cast(el, Toggle).getData()?"1":"0";
+						case number : "" + cast(el, SliderNum).getData();
+						case input  : "" + cast(el, TextInput).getData();
+						default : ""; 
 					}
 					engine.setting_set(v, data);
 				}
-				// Extra settings
-				engine.setting_process();
+				
+				engine.setting_process(); // Extra settings
+				
 				if (engine.settings_save()){
 					logStatus('Settings Saved [OK]');
 				}else{
@@ -437,7 +439,7 @@ class Main extends BaseApp
 				switch (ind){
 					case 0: WM.STATE.goto('opt');
 					case 1: wBar.openSub( // This will resume the focused item, also will open animated
-							MessageBox.create("Mednafen launcher\nby John Dimi 2020", 0, null, 40),
+							MessageBox.create('PSXMED ${Engine.VER}\nby John Dimi 2020', 0, null, 40),
 							true);
 					case 2: Sys.exit(0);
 					default:
