@@ -65,7 +65,9 @@ There is this tool for Windows : **Pismo File Mount** that can mount archives to
 
 - I recommend `CFS` archives, they use LZMA compression, which is better than ZIP compression
 
-- I have made a TOOL to convert `.CUE` files to `.CFS` while also encoding the CDDA audio tracks to VORBIS, this is to maximize filesize savings. **AVAILABLE PUBLICLY SOON**
+- I have made a TOOL to convert `.CUE` files to `.CFS` while also encoding the CDDA audio tracks to VORBIS, this is to maximize filesize savings. 
+
+  - :fire: **GET IT FROM HERE** : https://github.com/johndimi/cuetocfs
 
 - Example: `Rayman (1995).cfs` a game that has many audio tracks is down to just 75MB in `.cfs` format (from 500MB+) ready to be mounted and played. 
 
