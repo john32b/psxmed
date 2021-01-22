@@ -1,7 +1,7 @@
 # PSXMED, PS1 Game Launcher for MEDNAFEN
 
 **PSXMED**, **Version** : 0.5.2 (*2020-11*), **License** : MIT   
-**Author** : John Dimi 
+**Author** : John32B 
 
 This is an **unorthodox** PS1 game launcher for **Mednafen** that comes with some practical features. It is unorthodox in a way that this is built using **NodeJS** and runs on a **terminal**. I guess this is completely obscure, who in the world uses a game launcher running on a terminal ? This whole project started just as a personal tool/helper to quickly launch PS1 games on Mednafen *(my favorite PS1 Emulator)*. 
 
@@ -12,7 +12,7 @@ This is an **unorthodox** PS1 game launcher for **Mednafen** that comes with som
 - Windows Only! *(It can probably be ported to Linux easily, can't bother)*
 - Make sure you have **NodeJS** installed with **NPM** *(NPM is the package manager of NodeJS, should install automatically when installing NodeJS)* :: https://nodejs.org
 - Open a Command Prompt and run :  
-  `npm i https://github.com/johndimi/psxmed -g`   
+  `npm i https://github.com/john32b/psxmed -g`   
   This will install PSXMED globally and it can be run from anywhere
 - You should have Mednafen *(version **1.24.3** or above)*, setup ready to go.
   - For Mednafen to be able to launch PS1 games you need to setup the PS1 BIOS files. *(google around)*
@@ -67,7 +67,7 @@ There is this tool for Windows : **Pismo File Mount** that can mount archives to
 
 - I have made a TOOL to convert `.CUE` files to `.CFS` while also encoding the CDDA audio tracks to VORBIS, this is to maximize filesize savings. 
 
-  - :fire: **GET IT FROM HERE** : https://github.com/johndimi/cuetocfs
+  - :fire: **GET IT FROM HERE** : https://github.com/john32b/cuetocfs
 
 - Example: `Rayman (1995).cfs` a game that has many audio tracks is down to just 75MB in `.cfs` format (from 500MB+) ready to be mounted and played. 
 
@@ -116,15 +116,15 @@ Sorry.:man_shrugging:
 PSXMED is programmed in HAXE, targeting NodeJS. Some general HAXE knowledge is required if you want to get your hands dirty.
 
 - **Haxe 4.1.3** https://haxe.org
-- **djNode V0.6.0** https://github.com/johndimi/djNode -- *Get the tag zip file and install it with haxelib*
-- **djTui V0.2.0** https://github.com/johndimi/djTui -- *Get the tag zip file and install it with haxelib*
+- **djNode V0.6.0** https://github.com/john32b/djNode -- *Get the tag zip file and install it with haxelib*
+- **djTui V0.2.0** https://github.com/john32b/djTui -- *Get the tag zip file and install it with haxelib*
 - **hxnodejs** `haxelib install hxnodejs`
 
 Clone the repo and **use NPM** to build: `npm run build`   This should build the binary `psxlaunch.js` in the bin folder
 
 ## :gem: About the Project
 
-This app was created for personal use. But I decided to make a readme and upload to GitHub just because. **Why is this a thing?** I wanted a simple and quick way to launch Mednafen games, and automate a bunch of actions I was doing by hand. I used tools that I was already comfortable with. Also it was a nice programming practice and application of my [`djTui`](https://github.com/johndimi/djTui) library  
+This app was created for personal use. But I decided to make a readme and upload to GitHub just because. **Why is this a thing?** I wanted a simple and quick way to launch Mednafen games, and automate a bunch of actions I was doing by hand. I used tools that I was already comfortable with. Also it was a nice programming practice and application of my [`djTui`](https://github.com/john32b/djTui) library  
 
 **Why NodeJS? and CLI?**  
 I like NodeJS, it's simple, fast, and it does the job. Also it snowballed from something extremely simple just to launching games to having a UI and changing Mednafen settings etc.

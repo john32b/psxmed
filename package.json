@@ -5,10 +5,10 @@
   "keywords": [
     "emulator","launcher","ps1","psx"
   ],
-  "homepage": "https://github.com/johndimi/psxmed",
+  "homepage": "https://github.com/john32b/psxmed",
   "version": "0.5.2",
   "author": {
-    "name": "John Dimi",
+    "name": "John32B",
     "email": "johndimi@outlook.com"
   },
   "engines": { "node": ">= 6.14.1" },

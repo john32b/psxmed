@@ -65,7 +65,7 @@ class Main extends BaseApp
 		PROGRAM_INFO = {
 			name:Engine.NAME,
 			version:Engine.VER,
-			author:"JohnDimi"
+			author:"John32B"
 		};
 
 		ARGS.Actions = [
@@ -439,7 +439,7 @@ class Main extends BaseApp
 				switch (ind){
 					case 0: WM.STATE.goto('opt');
 					case 1: wBar.openSub( // This will resume the focused item, also will open animated
-							MessageBox.create('PSXMED ${Engine.VER}\nby John Dimi 2020', 0, null, 40),
+							MessageBox.create('PSXMED ${Engine.VER}\nby John32B 2020', 0, null, 40),
 							true);
 					case 2: Sys.exit(0);
 					default:
