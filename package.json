@@ -9,7 +9,7 @@
   "version": "0.5.2",
   "author": {
     "name": "John32B",
-    "email": "johndimi@outlook.com"
+    "email": "john32b@outlook.com"
   },
   "engines": { "node": ">= 6.14.1" },
   "os": [ "win32" ],
